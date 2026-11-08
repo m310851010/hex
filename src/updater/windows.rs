@@ -1,17 +1,20 @@
 //! Windows installs: the per-user version layout our installers receipt
-//! (`%APPDATA%\hex\install.json`) updates itself by staging the
+//! (`install.json` at the install root) updates itself by staging the
 //! new `hex.exe` and its console entry point `hex.com` (crates/console) into
 //! their own version directory and switching the `current-version` pointer.
-//! `bin\hex.com`, the copy PATH names, follows. Before anything runs, every
-//! download must carry a valid Authenticode signature from Anomaly's
-//! Artifact Signing identity. Administrators turn updates off with the
-//! `DisableUpdates` policy value.
+//! `bin\hex.com`, the copy PATH names, follows. Setup installs into the
+//! folder the user chose (`%APPDATA%\hex` by default) and the script into
+//! `%APPDATA%\hex`; the root is whatever folder the running `hex.exe` sits
+//! under as `versions\<version>`. Before anything runs, every download must
+//! carry a valid Authenticode signature from Anomaly's Artifact Signing
+//! identity. Administrators turn updates off with the `DisableUpdates`
+//! policy value.
 
 use std::fs::{self, OpenOptions};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
-use color_eyre::eyre::{Result, WrapErr, bail};
+use color_eyre::eyre::{ContextCompat as _, Result, WrapErr, bail};
 use fs2::FileExt;
 
 use super::Method;
@@ -95,17 +98,43 @@ fn eligibility() -> std::result::Result<String, Ineligible> {
     let executable = std::env::current_exe()
         .and_then(|path| path.canonicalize())
         .map_err(|_| Ineligible::NotInstalled)?;
-    let root = crate::app_paths::support_dir().map_err(|_| Ineligible::NotInstalled)?;
-    let support = root.canonicalize().map_err(|_| Ineligible::NotInstalled)?;
+    let root = install_root(&executable).ok_or(Ineligible::NotInstalled)?;
     let profile = dirs::config_dir()
         .and_then(|profile| profile.canonicalize().ok())
         .ok_or(Ineligible::OutsideProfile)?;
-    check_layout(&executable, &support, &profile)?;
-    if let Some(channel) = super::receipt_channel(&support) {
+    check_layout(&executable, &root, &profile)?;
+    if let Some(channel) = super::receipt_channel(&root) {
         return Ok(channel);
     }
     repair_receipt(&root)?;
-    super::receipt_channel(&support).ok_or(Ineligible::Receipt)
+    super::receipt_channel(&root).ok_or(Ineligible::Receipt)
+}
+
+/// The install root this executable runs from: the folder that holds
+/// `versions\<version>\` beside the receipt, `bin`, `current-version`, and
+/// `updates`. `None` for a loose or copied `hex.exe` outside that layout.
+fn install_root(executable: &Path) -> Option<PathBuf> {
+    let version = executable.parent()?.file_name()?.to_str()?;
+    if !super::protocol::is_version_name(version) {
+        return None;
+    }
+    let versions = executable.parent()?.parent()?;
+    if !versions.file_name()?.eq_ignore_ascii_case("versions") {
+        return None;
+    }
+    Some(versions.parent()?.to_path_buf())
+}
+
+/// The install root for staging and the console entry point: this
+/// executable's own root, or the support folder when this copy isn't a
+/// managed install (which never stages, but still downloads and repairs).
+fn layout_root() -> Result<PathBuf> {
+    std::env::current_exe()
+        .ok()
+        .and_then(|executable| executable.canonicalize().ok())
+        .and_then(|executable| install_root(&executable))
+        .or_else(|| crate::app_paths::support_dir().ok())
+        .wrap_err("this Hex has no install root")
 }
 
 fn check_layout(
@@ -197,23 +226,25 @@ pub fn updates_disabled_by_policy() -> bool {
 }
 
 /// Stages `file` (hex.exe) and `console` (hex.com), when the release has
-/// one, as `version`.
+/// one, as `version`, into this install's root.
 pub fn stage(file: &Path, console: Option<&Path>, version: &str) -> Result<Staged> {
     verify_authenticode(file, AUTHENTICODE_SIGNER)?;
     if let Some(console) = console {
         verify_authenticode(console, AUTHENTICODE_SIGNER)?;
     }
-    let support = crate::app_paths::support_dir()?;
+    let root = layout_root()?;
+    let updates = root.join("updates");
+    fs::create_dir_all(&updates)?;
     let lock = OpenOptions::new()
         .create(true)
         .truncate(false)
         .read(true)
         .write(true)
-        .open(support.join("updates").join("update.lock"))?;
+        .open(updates.join("update.lock"))?;
     lock.try_lock_exclusive()
         .wrap_err("another Windows update is already in progress")?;
-    let staging = support.join("updates").join("hex.exe.staging");
-    let console_staging = support.join("updates").join("hex.com.staging");
+    let staging = updates.join("hex.exe.staging");
+    let console_staging = updates.join("hex.com.staging");
     let _ = fs::remove_file(&staging);
     let _ = fs::remove_file(&console_staging);
     fs::copy(file, &staging)?;
@@ -222,7 +253,7 @@ pub fn stage(file: &Path, console: Option<&Path>, version: &str) -> Result<Stage
     }
     let console_staging = console.map(|_| console_staging);
     let activation = validate_executable(&staging, version)
-        .and_then(|()| activate(&support, version, &staging, console_staging.as_deref()));
+        .and_then(|()| activate(&root, version, &staging, console_staging.as_deref()));
     if activation.is_err() {
         let _ = fs::remove_file(&staging);
         if let Some(console_staging) = &console_staging {
@@ -233,7 +264,7 @@ pub fn stage(file: &Path, console: Option<&Path>, version: &str) -> Result<Stage
     // A release without hex.com keeps the one in bin, which finds hex.exe
     // through current-version.
     if console.is_some()
-        && let Err(error) = publish_console(&support, &executable.with_file_name("hex.com"))
+        && let Err(error) = publish_console(&root, &executable.with_file_name("hex.com"))
     {
         tracing::warn!(%error, "could not put the updated hex.com on PATH");
     }
@@ -370,12 +401,17 @@ fn validate_console(path: &Path, version: &str) -> Result<()> {
 /// Whether this install lacks `hex.com` beside the running `hex.exe` or in
 /// `bin`: Setup and updaters before it installed only `hex.exe`.
 pub fn console_missing() -> bool {
-    let (Ok(executable), Ok(support)) = (std::env::current_exe(), crate::app_paths::support_dir())
+    let Some(root) = std::env::current_exe()
+        .ok()
+        .and_then(|executable| executable.canonicalize().ok())
+        .and_then(|executable| install_root(&executable))
     else {
         return false;
     };
-    !executable.with_file_name("hex.com").is_file()
-        || !support.join("bin").join("hex.com").is_file()
+    let beside = std::env::current_exe()
+        .map(|executable| !executable.with_file_name("hex.com").is_file())
+        .unwrap_or(true);
+    beside || !root.join("bin").join("hex.com").is_file()
 }
 
 /// Adds a release's verified `hex.com` beside the running `hex.exe` and on
@@ -383,17 +419,17 @@ pub fn console_missing() -> bool {
 /// `hex.exe` beside it, so any release's copy serves this version.
 pub fn install_console(file: &Path) -> Result<()> {
     verify_authenticode(file, AUTHENTICODE_SIGNER)?;
-    let support = crate::app_paths::support_dir()?;
+    let root = layout_root()?;
     let beside = std::env::current_exe()?.with_file_name("hex.com");
     replace_file(file, &beside)?;
     validate_console(&beside, crate::VERSION)?;
-    publish_console(&support, &beside)
+    publish_console(&root, &beside)
 }
 
 /// Copies `console` to `bin\hex.com` and keeps `bin` on the user's PATH,
 /// where a terminal finds `hex` across updates.
-fn publish_console(support: &Path, console: &Path) -> Result<()> {
-    let bin = support.join("bin");
+fn publish_console(root: &Path, console: &Path) -> Result<()> {
+    let bin = root.join("bin");
     fs::create_dir_all(&bin)?;
     replace_file(console, &bin.join("hex.com"))?;
     add_to_path(&bin)
@@ -499,12 +535,12 @@ fn sync_file(path: &Path) -> Result<()> {
 /// the running version's files are never touched, and every version but the
 /// new, running, and previous one is pruned.
 pub(super) fn activate(
-    support: &Path,
+    root: &Path,
     version: &str,
     staging: &Path,
     console: Option<&Path>,
 ) -> Result<PathBuf> {
-    let versions = support.join("versions");
+    let versions = root.join("versions");
     let version_dir = versions.join(version);
     fs::create_dir_all(&version_dir)?;
     let executable = version_dir.join("hex.exe");
@@ -524,11 +560,11 @@ pub(super) fn activate(
         validate_console(&installed, version)?;
     }
 
-    let pointer = support.join("current-version");
+    let pointer = root.join("current-version");
     let previous = fs::read_to_string(&pointer)
         .ok()
         .map(|content| content.trim().to_string());
-    let pointer_partial = support.join("current-version.partial");
+    let pointer_partial = root.join("current-version.partial");
     fs::write(&pointer_partial, format!("{version}\n"))?;
     sync_file(&pointer_partial)?;
     fs::rename(&pointer_partial, &pointer)?;
@@ -620,6 +656,22 @@ mod tests {
             check_layout(&executable, &support, &elsewhere.join("other-profile")),
             Err(Ineligible::OutsideProfile)
         );
+        let _ = fs::remove_dir_all(profile);
+    }
+
+    #[test]
+    fn the_install_root_is_the_folder_holding_versions() {
+        let (profile, support, executable) = installed("root");
+        assert_eq!(
+            install_root(&executable).as_deref(),
+            Some(support.as_path())
+        );
+        // A folder that isn't versions leaves the executable loose, as a
+        // dev build in target\debug or a copied hex.exe is.
+        let built = profile.join(r"target\debug\hex.exe");
+        fs::create_dir_all(built.parent().unwrap()).unwrap();
+        fs::write(&built, b"hex").unwrap();
+        assert_eq!(install_root(&built.canonicalize().unwrap()), None);
         let _ = fs::remove_dir_all(profile);
     }
 

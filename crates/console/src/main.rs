@@ -8,7 +8,7 @@
 //! it would for a GUI program.
 //!
 //! It finds `hex.exe` beside itself (`versions\<version>\hex.com`), or, as
-//! the copy in `%APPDATA%\hex\bin` that PATH names, the version
+//! the copy in the install's `bin` that PATH names, the version
 //! `current-version` points at.
 
 #[cfg(windows)]

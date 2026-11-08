@@ -1,17 +1,20 @@
 ; Per-user Windows installer for Hex. It installs exactly the managed layout
-; that .github/release/install-windows.ps1 creates and src/windows_updater.rs updates:
+; that .github/release/install-windows.ps1 creates and src/updater/windows.rs
+; updates, into the folder the user picks on the directory page:
 ;
-;   %APPDATA%\hex\versions\<version>\hex.exe
-;   %APPDATA%\hex\versions\<version>\hex.com  (the console entry point)
-;   %APPDATA%\hex\bin\hex.com  (on the user's PATH)
-;   %APPDATA%\hex\current-version
-;   %APPDATA%\hex\install.json  (the direct-install receipt)
+;   <root>\versions\<version>\hex.exe
+;   <root>\versions\<version>\hex.com  (the console entry point)
+;   <root>\bin\hex.com  (on the user's PATH)
+;   <root>\current-version
+;   <root>\install.json  (the direct-install receipt)
 ;   Start Menu\Programs\Hex.lnk  (description "Hex managed install")
 ;
-; so the app keeps updating itself from the release service afterwards. The
-; uninstaller lives outside versions\ because the updater prunes old version
-; directories. Settings, logs, history, and models stay on uninstall, as with
-; install-windows.ps1 -Uninstall.
+; The root defaults to %APPDATA%\hex (the script's layout), so the app keeps
+; updating itself from the release service afterwards; a folder outside the
+; user's profile is warned about, because the updater only replaces an
+; install it alone can write. The uninstaller lives outside versions\ because
+; the updater prunes old version directories. Settings, logs, history, and
+; models stay on uninstall, as with install-windows.ps1 -Uninstall.
 ;
 ; Compile with scripts/build-windows-installer.ps1, which passes:
 ;   /DAppVersion=2.3.0 /DArch=x64|arm64 /DExecutable=<hex.exe> /DConsole=<hex.com>
@@ -41,7 +44,7 @@
 
 [Setup]
 ; Keep this AppId forever: it names the Apps & Features entry that
-; src/windows_updater.rs keeps current after self-updates.
+; src/updater/windows.rs keeps current after self-updates.
 AppId={{6ED48C92-5177-41F4-B8D6-37B7B02CFDF4}
 AppName=Hex
 AppVersion={#AppVersion}
@@ -54,8 +57,10 @@ PrivilegesRequired=lowest
 ArchitecturesAllowed={#AllowedArchitectures}
 ArchitecturesInstallIn64BitMode={#AllowedArchitectures}
 DefaultDirName={userappdata}\hex
-DisableDirPage=yes
-UsePreviousAppDir=no
+; The directory page names the folder the managed layout installs into; an
+; upgrade keeps the folder the previous install chose.
+DisableDirPage=no
+UsePreviousAppDir=yes
 DisableProgramGroupPage=yes
 DisableReadyPage=yes
 DisableWelcomePage=yes
@@ -104,28 +109,63 @@ begin
     compared, and the self-updater follows the channel's current release. }
 end;
 
+{ An earlier version left running would hold the instance lock. An upgrade
+  that moves the install keeps no pointer to the old folder, so Hex is also
+  stopped from the default layout. }
 procedure StopManagedHex();
 var
   ResultCode: Integer;
-  Versions, Bin: String;
+  Versions, Bin, DefaultVersions, DefaultBin: String;
 begin
   Versions := ExpandConstant('{app}\versions\');
   StringChangeEx(Versions, '''', '''''', True);
   Bin := ExpandConstant('{app}\bin\');
   StringChangeEx(Bin, '''', '''''', True);
+  DefaultVersions := ExpandConstant('{userappdata}\hex\versions\');
+  StringChangeEx(DefaultVersions, '''', '''''', True);
+  DefaultBin := ExpandConstant('{userappdata}\hex\bin\');
+  StringChangeEx(DefaultBin, '''', '''''', True);
   Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
     '-NoProfile -NonInteractive -WindowStyle Hidden -Command "Get-Process hex -ErrorAction SilentlyContinue | ' +
     'Where-Object { $_.Path -and ($_.Path.StartsWith(''' + Versions + ''', [StringComparison]::OrdinalIgnoreCase) -or ' +
-    '$_.Path.StartsWith(''' + Bin + ''', [StringComparison]::OrdinalIgnoreCase)) } | ' +
+    '$_.Path.StartsWith(''' + Bin + ''', [StringComparison]::OrdinalIgnoreCase) -or ' +
+    '$_.Path.StartsWith(''' + DefaultVersions + ''', [StringComparison]::OrdinalIgnoreCase) -or ' +
+    '$_.Path.StartsWith(''' + DefaultBin + ''', [StringComparison]::OrdinalIgnoreCase) } | ' +
     'Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep -Milliseconds 500"',
     '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 end;
 
-{ An earlier version left running would hold the instance lock. }
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 begin
   StopManagedHex();
   Result := '';
+end;
+
+{ Whether Folder is Parent or below it, compared case-insensitively. }
+function InFolder(Folder, Parent: String): Boolean;
+begin
+  Result := Pos(AnsiLowercase(Parent) + '\', AnsiLowercase(Folder) + '\') = 1;
+end;
+
+{ The updater replaces only an install inside the user's own profile, which
+  default ACLs keep private (src/updater/windows.rs). A folder outside it
+  installs fine, but Hex could never update itself there, so say so before
+  the folder is committed. }
+function NextButtonClick(CurPageID: Integer): Boolean;
+var
+  Choice, Profile: String;
+begin
+  Result := True;
+  if CurPageID = wpSelectDir then
+  begin
+    Choice := WizardDirValue;
+    Profile := ExpandConstant('{%USERPROFILE}');
+    if (Choice <> '') and not InFolder(Choice, Profile) and
+       (MsgBox('Hex installed outside your user folder cannot update itself automatically.' + #13#10#13#10 +
+               'Install to ' + Choice + ' anyway?',
+               mbConfirmation, MB_YESNO) = IDNO) then
+      Result := False;
+  end;
 end;
 
 { Replaces Path with Contents through a .partial file. }

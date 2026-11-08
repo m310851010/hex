@@ -43,7 +43,10 @@ updating itself from the Dev channel; afterwards, the stable release.
 
 [anoma.ly/hex](https://anoma.ly/hex/) picks the right one. The
 installer needs no administrator rights: it installs for the current user,
-adds Hex to the Start menu, to **Settings › Apps** for uninstalling, and
+into the folder you choose on its folder page (`%APPDATA%\hex` by default; a
+folder outside your user profile installs fine, but Hex cannot update itself
+there and the installer says so), adds Hex to the Start menu, to
+**Settings › Apps** for uninstalling, and
 `hex` to PATH for terminals, and opens Hex, whose first run downloads a speech
 model. Releases built once
 Anomaly's Azure Artifact Signing is configured are Authenticode-signed
@@ -69,12 +72,13 @@ powershell -ExecutionPolicy Bypass -Command "iwr https://anoma.ly/hex/files/inst
 
 Uninstall a script install with `install-windows.ps1 -Uninstall`.
 
-The managed layout is `%APPDATA%\hex\versions\<version>\` holding `hex.exe`,
+The managed layout sits in the folder the installer or script installs into
+(`%APPDATA%\hex` for the script): `versions\<version>\` holds `hex.exe`,
 the app, a GUI program so launching Hex opens no console window, and
 `hex.com`, its console entry point, which runs `hex.exe` with the same
 arguments, waits for it, and returns its exit code (`hex` and `hex app` only
 start the app and return). Shortcuts, Launch at login,
-and the Start menu open `hex.exe`. `%APPDATA%\hex\bin\hex.com`, a copy that
+and the Start menu open `hex.exe`. `bin\hex.com`, a copy that
 runs the version `current-version` names, is on the user's PATH, and a
 terminal resolves `hex` to it before any `hex.exe` because PATHEXT lists
 `.COM` first. Terminals opened before the install need reopening to see PATH.

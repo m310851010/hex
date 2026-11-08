@@ -69,8 +69,9 @@ it is present and the root is writable by this user alone:
 - Linux: `~/.local/share/hex/install.json` (`install-linux.sh`;
   `scripts/install-linux.sh` source builds write none and keep their
   `source-build` marker).
-- Windows: `%APPDATA%\hex\install.json` (`install-windows.ps1` and
-  the Setup.exe).
+- Windows: `install.json` at the install root (`install-windows.ps1` writes
+  `%APPDATA%\hex\install.json`; the Setup.exe writes it in the folder the
+  user chose, `%APPDATA%\hex` by default).
 - macOS: the client decides from the bundle's location (a writable,
   non-translocated `Hex.app` is direct).
 

@@ -1270,8 +1270,10 @@ CoreAudio formats, AppleScript details, or event serialization.
   signature over its SHA-256. Download URLs must be on the manifest's host
   (`protocol::resolve_url`).
 - Only direct installs replace themselves: Linux and Windows with our
-  installer's receipt (`install.json` in the user-owned data root, which also
-  names the channel) and the version layout, macOS a `Hex.app` this user can
+  installer's receipt (`install.json` at the install root — on Windows the
+  folder the Setup chose, `%APPDATA%\hex` by default, inside the user's
+  profile, which the updater derives from the running executable — and which
+  also names the channel) and the version layout, macOS a `Hex.app` this user can
   rename in a writable, non-translocated folder. A read-only macOS location
   shows Download update (the DMG); package-managed installs (pacman, Nix) show
   their manager's command once it serves another version; source and test
@@ -1712,9 +1714,12 @@ the same version again.
 installer (`packaging/windows/hex.iss`, built by
 `scripts/build-windows-installer.ps1`) that installs exactly the managed
 layout `install-windows.ps1` creates, so self-updates keep working:
-`%APPDATA%\hex\versions\<version>\hex.exe`, `current-version`, the
+`versions\<version>\hex.exe`, `current-version`, the
 `install.json` direct-install receipt, and a Start Menu shortcut carrying the
-managed mark. Its uninstaller lives in `hex\uninstall` because
+managed mark. Its directory page chooses the install folder (`%APPDATA%\hex`
+by default, the previous choice remembered; outside the user's profile it
+warns that Hex can't update itself there). Its uninstaller lives in
+`hex\uninstall` because
 updates prune old version directories; it removes every version, the
 receipt, the shortcut, and Launch at login, and keeps settings. It installs
 its version over whatever is installed (versions are never compared). Keep
