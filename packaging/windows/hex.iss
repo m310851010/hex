@@ -12,9 +12,10 @@
 ; The root defaults to %APPDATA%\hex (the script's layout), so the app keeps
 ; updating itself from the release service afterwards; a folder outside the
 ; user's profile is warned about, because the updater only replaces an
-; install it alone can write. The uninstaller lives outside versions\ because
-; the updater prunes old version directories. Settings, logs, history, and
-; models stay on uninstall, as with install-windows.ps1 -Uninstall.
+; install it alone can write. Hex keeps everything it produces in this same
+; folder — settings, history, logs, models, captures — and uninstall leaves
+; it all in place. The uninstaller lives outside versions\ because
+; the updater prunes old version directories.
 ;
 ; Compile with scripts/build-windows-installer.ps1, which passes:
 ;   /DAppVersion=2.3.0 /DArch=x64|arm64 /DExecutable=<hex.exe> /DConsole=<hex.com>
@@ -148,9 +149,10 @@ begin
 end;
 
 { The updater replaces only an install inside the user's own profile, which
-  default ACLs keep private (src/updater/windows.rs). A folder outside it
-  installs fine, but Hex could never update itself there, so say so before
-  the folder is committed. }
+  default ACLs keep private (src/updater/windows.rs). Hex also keeps its
+  data — history, logs, models — in the install folder. A folder outside the
+  profile installs fine, but Hex could never update itself there, so say so
+  before the folder is committed. }
 function NextButtonClick(CurPageID: Integer): Boolean;
 var
   Choice, Profile: String;
@@ -161,7 +163,7 @@ begin
     Choice := WizardDirValue;
     Profile := ExpandConstant('{%USERPROFILE}');
     if (Choice <> '') and not InFolder(Choice, Profile) and
-       (MsgBox('Hex installed outside your user folder cannot update itself automatically.' + #13#10#13#10 +
+       (MsgBox('Hex installs its data (history, logs, models) into the same folder, and a folder outside your user folder cannot update itself automatically.' + #13#10#13#10 +
                'Install to ' + Choice + ' anyway?',
                mbConfirmation, MB_YESNO) = IDNO) then
       Result := False;

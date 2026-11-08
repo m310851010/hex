@@ -32,6 +32,12 @@ pub fn support_dir() -> Result<PathBuf> {
     if let Some(path) = std::env::var_os("HEX_APPLICATION_SUPPORT_DIR") {
         return Ok(path.into());
     }
+    #[cfg(windows)]
+    if let Some(root) = this_managed_root() {
+        // A managed install keeps everything it produces — settings,
+        // history, logs, models, downloads — beside the install itself.
+        return Ok(root);
+    }
     let data =
         dirs::data_dir().ok_or_else(|| eyre!("application data directory is unavailable"))?;
     let folder = if is_macos_test_build() {
@@ -40,6 +46,27 @@ pub fn support_dir() -> Result<PathBuf> {
         "hex"
     };
     Ok(data.join(folder))
+}
+
+/// The folder holding this executable's `versions\<version>\` layout: the
+/// managed install's root. `None` unless the executable sits two folders
+/// below one named `versions`, so a loose or copied `hex.exe` — a build in
+/// `target\debug`, a download — stays on the per-profile folders.
+#[cfg(windows)]
+pub fn managed_root(executable: &Path) -> Option<PathBuf> {
+    let versions = executable.parent()?.parent()?;
+    if !versions.file_name()?.eq_ignore_ascii_case("versions") {
+        return None;
+    }
+    Some(versions.parent()?.to_path_buf())
+}
+
+/// [`managed_root`] for the running executable.
+#[cfg(windows)]
+fn this_managed_root() -> Option<PathBuf> {
+    std::env::current_exe()
+        .ok()
+        .and_then(|executable| managed_root(&executable))
 }
 
 pub fn logs_dir() -> Result<PathBuf> {
@@ -54,11 +81,12 @@ pub fn models_dir() -> Result<PathBuf> {
 }
 
 /// `name` in the support folder, except on Windows, where logs and models
-/// belong to this computer: `%LOCALAPPDATA%\hex`, not the Roaming
+/// belonged to this computer: `%LOCALAPPDATA%\hex`, not the Roaming
 /// `%APPDATA%\hex`, which managed networks copy to a server at every sign-in.
-/// An older Hex's Roaming copy moves over once. While it can't (a running Hex
-/// holds its files), the Roaming copy keeps being used, so nothing downloads
-/// again.
+/// A managed install keeps them beside the install instead, and an older
+/// Hex's `%LOCALAPPDATA%` copy moves over once — so models never download
+/// again after the update. While a move can't happen (a running Hex holds
+/// its files), the old copy keeps being used, so nothing downloads again.
 fn machine_local(cell: &std::sync::OnceLock<PathBuf>, name: &str) -> Result<PathBuf> {
     if let Some(path) = cell.get() {
         return Ok(path.clone());
@@ -66,20 +94,44 @@ fn machine_local(cell: &std::sync::OnceLock<PathBuf>, name: &str) -> Result<Path
     let roaming = support_dir()?.join(name);
     let path = match local_support_dir() {
         Some(local) => move_once(&roaming, &local.join(name)),
-        None => roaming,
+        None => adopt_machine_local(&roaming, name),
     };
     Ok(cell.get_or_init(|| path).clone())
 }
 
 /// `%LOCALAPPDATA%\hex` on Windows, unless a data folder is chosen for this
-/// run (`HEX_APPLICATION_SUPPORT_DIR`); elsewhere none.
+/// run (`HEX_APPLICATION_SUPPORT_DIR`) or this is a managed install, which
+/// keeps even its machine-local files beside the install. Elsewhere none.
 fn local_support_dir() -> Option<PathBuf> {
     if !cfg!(windows) || std::env::var_os("HEX_APPLICATION_SUPPORT_DIR").is_some() {
+        return None;
+    }
+    #[cfg(windows)]
+    if this_managed_root().is_some() {
         return None;
     }
     std::env::var_os("LOCALAPPDATA")
         .filter(|value| !value.is_empty())
         .map(|local| PathBuf::from(local).join("hex"))
+}
+
+/// A managed install's machine-local folder: the one beside the install,
+/// adopting an older Hex's `%LOCALAPPDATA%\hex` copy once.
+#[cfg(windows)]
+fn adopt_machine_local(roaming: &Path, name: &str) -> PathBuf {
+    let legacy = std::env::var_os("LOCALAPPDATA")
+        .filter(|value| !value.is_empty())
+        .map(|local| PathBuf::from(local).join("hex").join(name));
+    legacy.map_or_else(
+        || roaming.to_path_buf(),
+        |legacy| move_once(&legacy, roaming),
+    )
+}
+
+/// No per-machine folder off the support folder elsewhere.
+#[cfg(not(windows))]
+fn adopt_machine_local(roaming: &Path, _name: &str) -> PathBuf {
+    roaming.to_path_buf()
 }
 
 /// `local`, after moving `roaming` there if only `roaming` exists. A move that
@@ -262,6 +314,45 @@ mod tests {
         assert_eq!(move_once(&roaming, &local), local);
         let fresh = root.join("Fresh").join("models");
         assert_eq!(move_once(&root.join("none"), &fresh), fresh);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_managed_install_moves_the_machine_local_folder_beside_it() {
+        let root = std::env::temp_dir().join(format!("hex-adopt-{}", std::process::id()));
+        let legacy = root.join("Local").join("hex").join("logs");
+        let beside = root.join("Install").join("logs");
+        fs::create_dir_all(&legacy).unwrap();
+        fs::write(legacy.join("process.log"), b"diagnostics").unwrap();
+
+        // `adopt_machine_local` points `move_once` at the old
+        // `%LOCALAPPDATA%\hex` folder, so the move is what carries the logs
+        // over — and a failed move keeps the old copy in use.
+        assert_eq!(move_once(&legacy, &beside), beside);
+        assert_eq!(
+            fs::read(beside.join("process.log")).unwrap(),
+            b"diagnostics"
+        );
+        assert_eq!(move_once(&legacy, &beside), beside);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn only_a_versions_layout_names_the_managed_root() {
+        let root = std::env::temp_dir().join(format!("hex-managed-{}", std::process::id()));
+        let managed = root.join("Apps").join("Hex");
+        fs::create_dir_all(managed.join(r"versions\1.0.0")).unwrap();
+        let installed = managed.join(r"versions\1.0.0\hex.exe");
+        assert_eq!(managed_root(&installed), Some(managed));
+        // A build, and a loose or copied executable, keep the profile folders.
+        let built = root.join("checkout").join(r"target\debug\hex.exe");
+        fs::create_dir_all(built.parent().unwrap()).unwrap();
+        assert_eq!(managed_root(&built), None);
+        let loose = root.join("hex.exe");
+        fs::write(&loose, b"").unwrap();
+        assert_eq!(managed_root(&loose), None);
         fs::remove_dir_all(root).unwrap();
     }
 

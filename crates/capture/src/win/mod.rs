@@ -298,8 +298,13 @@ pub fn wide(text: &str) -> Vec<u16> {
     text.encode_utf16().chain(std::iter::once(0)).collect()
 }
 
-/// `%LOCALAPPDATA%\Scrawl`: logs and machine-local state.
+/// `%LOCALAPPDATA%\Scrawl` for a loose copy of Hex; a managed install keeps
+/// logs and machine-local state beside the install, where Hex keeps everything.
 pub fn local_dir() -> PathBuf {
+    #[cfg(target_os = "windows")]
+    if let Some(root) = crate::transcribe::hex_managed_root() {
+        return root.join("scrawl");
+    }
     scrawl_router::user_dirs::data_local_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join("Scrawl")

@@ -63,6 +63,9 @@ pub fn log_dir() -> Option<PathBuf> {
     }
     #[cfg(target_os = "windows")]
     {
+        if let Some(root) = crate::transcribe::hex_managed_root() {
+            return Some(root.join("logs").join("scrawl").join("Logs"));
+        }
         Some(
             scrawl_router::user_dirs::data_local_dir()
                 .unwrap_or_else(|| PathBuf::from("."))

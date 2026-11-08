@@ -65,6 +65,13 @@ pub fn configured_captures_dir(value: &str) -> Option<PathBuf> {
 /// Linux.
 pub fn builtin_captures_dir() -> PathBuf {
     if cfg!(any(target_os = "windows", target_os = "linux")) {
+        #[cfg(target_os = "windows")]
+        // A managed Hex install keeps its captures beside the install, adopting
+        // an older Hex's `%LOCALAPPDATA%\scrawl\captures` once; a move that
+        // fails leaves the old folder in place and in use.
+        if let Some(root) = crate::transcribe::hex_managed_root() {
+            return adopt_captures(root.join("captures"));
+        }
         scrawl_router::user_dirs::data_local_dir()
             .unwrap_or_else(|| PathBuf::from("."))
             .join("scrawl")
@@ -73,6 +80,26 @@ pub fn builtin_captures_dir() -> PathBuf {
         scrawl_router::user_dirs::home_dir()
             .unwrap_or_else(|| PathBuf::from("."))
             .join("Library/Application Support/scrawl/captures")
+    }
+}
+
+/// `adopted`, after moving `legacy` there if only `legacy` exists.
+#[cfg(target_os = "windows")]
+fn adopt_captures(adopted: PathBuf) -> PathBuf {
+    let legacy = scrawl_router::user_dirs::data_local_dir()
+        .map(|local| local.join("scrawl").join("captures"));
+    match legacy {
+        Some(legacy) if !adopted.exists() && legacy.exists() => {
+            if legacy.parent().map(fs::create_dir_all).unwrap_or(Ok(()))
+                .and_then(|()| fs::rename(&legacy, &adopted))
+                .is_ok()
+            {
+                adopted
+            } else {
+                legacy
+            }
+        }
+        _ => adopted,
     }
 }
 

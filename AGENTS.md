@@ -278,8 +278,11 @@ substitute for source inspection or a second roadmap.
   values only. Locked switches read off at load and keep their saved values on
   save; list-driven work checks the policy where it starts.
 - `app_paths`: the Application Support owner (`hex` on every OS) for runtime
-  logs and shared state. The logs folder and its files are owner-only on
-  Unix (0700/0600, tightened when an older Hex left them open).
+  logs and shared state. A managed Windows install keeps this beside the
+  install — the folder Setup chose, `%APPDATA%\hex` by default — adopting an
+  older Hex's `%LOCALAPPDATA%\hex` logs and models once; a loose or copied
+  `hex.exe` keeps the per-profile folders. The logs folder and its files are
+  owner-only on Unix (0700/0600, tightened when an older Hex left them open).
 - `desktop/onboarding`, `desktop/permission_guide`: required permission health, the native
   floating System Settings guide, selected dictation-model installation, the
   release startup gate, and opt-in command-model setup.
@@ -1718,10 +1721,11 @@ layout `install-windows.ps1` creates, so self-updates keep working:
 `install.json` direct-install receipt, and a Start Menu shortcut carrying the
 managed mark. Its directory page chooses the install folder (`%APPDATA%\hex`
 by default, the previous choice remembered; outside the user's profile it
-warns that Hex can't update itself there). Its uninstaller lives in
+warns that Hex can't update itself there) — Hex keeps everything it produces
+in that same folder, so a chosen folder is the whole install. Its uninstaller lives in
 `hex\uninstall` because
 updates prune old version directories; it removes every version, the
-receipt, the shortcut, and Launch at login, and keeps settings. It installs
+receipt, the shortcut, and Launch at login, and leaves the data in place. It installs
 its version over whatever is installed (versions are never compared). Keep
 its `AppId` forever: the updater rewrites that Apps & Features entry's
 version. Release and the Windows installer workflow install, reinstall,
@@ -1769,8 +1773,12 @@ Tab to cycle, and `q`/Escape to quit.
   tracks, the rolling in-call transcript, and atomically published final
   transcripts.
 
-Windows uses `%APPDATA%\hex`, with logs and models in `%LOCALAPPDATA%\hex`
-(machine-local, so roaming profiles don't copy them), and Linux
+Windows keeps everything in the install folder — a managed install's
+`%APPDATA%\hex` by default, or the folder Setup chose — with logs and models
+beside the versions (`app_paths::machine_local` adopts an older Hex's
+`%LOCALAPPDATA%\hex` copy once); a loose `hex.exe` keeps `%APPDATA%\hex` with
+logs and models machine-local in `%LOCALAPPDATA%\hex`, so roaming profiles
+don't copy them. Linux uses
 `~/.local/share/hex` (or under `XDG_DATA_HOME`). Hex keeps no compatibility with earlier `voice-control`
 folders or per-OS settings files.
 

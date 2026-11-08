@@ -60,8 +60,11 @@ driver Hex still starts and decodes on the CPU, and Settings › Speech engine
 says so. **ARM64** decodes on the CPU. Both are
 self-contained: no Visual C++ Redistributable is required. Hex then keeps
 itself current through the signed update feed. Uninstalling removes every
-installed version, the shortcut, and Launch at login, and keeps settings and
-history in `%APPDATA%\hex` and logs and models in `%LOCALAPPDATA%\hex`.
+installed version, the shortcut, and Launch at login, and leaves the data
+folder in place. Hex keeps everything it produces in its install folder
+(`%APPDATA%\hex` by default, or the folder the installer chose): settings,
+history, logs in `logs\`, speech models in `models\`, and captures. The
+transforms config you write yourself stays in `~\.config\hex`.
 
 The installer and the script below create the same managed layout, so either
 can replace the other. For a scripted install:
@@ -187,12 +190,17 @@ cargo run -- listen --model parakeet_v3 --language pl
 Press Enter once to start, then again to stop. Captures shorter than 300 ms are
 discarded. `--device` accepts a case-insensitive fragment from `devices`.
 
-Runtime data is stored under `%APPDATA%\hex`, except logs and speech models,
-which belong to this computer and live in `%LOCALAPPDATA%\hex`: on managed
-networks Windows copies the Roaming folder to a server at every sign-in, which
-hundreds of megabytes of models would slow down. An older Hex's `logs` and
-`models` move there once (`app_paths::machine_local`); while a running Hex
-holds them, the Roaming copy stays in use. Observations are in
+An installed Hex keeps all of its runtime data in its install folder
+(`%APPDATA%\hex` for the default install, or the folder the installer chose):
+settings, history, and the receipt beside `versions\`, and logs and speech
+models in `logs\` and `models\` (`app_paths::machine_local`), so the whole
+install — program and data — is one folder you can choose. An older Hex's
+`logs` and `models` move over once from `%LOCALAPPDATA%\hex`; while a running
+Hex holds them, the old copy stays in use. A loose `hex.exe` that isn't an
+installed layout keeps the per-profile folders (`%APPDATA%\hex`, and logs and
+models in `%LOCALAPPDATA%\hex`, which managed networks would copy to a server
+at every sign-in — models move to `%LOCALAPPDATA%\hex` there). Observations
+are in
 `logs\live.ndjson`, and native/runtime diagnostics are in `logs\process.log`,
 including every panic with its thread and backtrace. A worker that stops
 unexpectedly leaves its cause there. `hex.exe` is a GUI program, so a launch

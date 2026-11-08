@@ -95,19 +95,22 @@ pub(crate) struct WindowsDesktopHost {
 /// Names the event that marks the running Hex app in this login session.
 const APP_INSTANCE_EVENT: &str = r"Local\anomaly.hex.app";
 
-/// The data root `HEX_APPLICATION_SUPPORT_DIR` names, unless it is the
-/// default one, which keeps the default event.
+/// The data root Hex keeps its files in, unless it is the default one, which
+/// keeps the default event: `HEX_APPLICATION_SUPPORT_DIR` names one, a
+/// managed install runs from its own install folder, and a loose or
+/// downloaded copy keeps `%APPDATA%\hex`.
 fn custom_root() -> Option<std::path::PathBuf> {
     let canonical = |path: std::path::PathBuf| path.canonicalize().unwrap_or(path);
-    let root = canonical(std::env::var_os("HEX_APPLICATION_SUPPORT_DIR")?.into());
+    let root = canonical(crate::app_paths::support_dir().ok()?);
     let default = dirs::data_dir().map(|data| canonical(data.join("hex")));
     (default.as_ref() != Some(&root)).then_some(root)
 }
 
 /// The instance event for a data root: [`APP_INSTANCE_EVENT`] for the
-/// default one, and its own event for another root that
-/// `HEX_APPLICATION_SUPPORT_DIR` names, so a copy of Hex with its own data,
-/// such as a benchmark, neither signals nor yields to the person's Hex.
+/// default one, and its own event for another data root — one
+/// `HEX_APPLICATION_SUPPORT_DIR` names or a managed install folder — so a
+/// copy of Hex with its own data, such as a benchmark, neither signals nor
+/// yields to the person's Hex.
 fn instance_event_name(custom_root: Option<&std::path::Path>) -> String {
     use sha2::{Digest, Sha256};
     match custom_root {

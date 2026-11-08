@@ -118,11 +118,7 @@ fn install_root(executable: &Path) -> Option<PathBuf> {
     if !super::protocol::is_version_name(version) {
         return None;
     }
-    let versions = executable.parent()?.parent()?;
-    if !versions.file_name()?.eq_ignore_ascii_case("versions") {
-        return None;
-    }
-    Some(versions.parent()?.to_path_buf())
+    crate::app_paths::managed_root(executable)
 }
 
 /// The install root for staging and the console entry point: this
