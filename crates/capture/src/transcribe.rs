@@ -36,30 +36,33 @@ const MAX_MERGED_MS: u64 = 30_000;
 const MAX_FORCED_MERGE_MS: u64 = 8 * 60_000;
 pub const MAX_CLIPS: usize = 24;
 
-/// Hex's managed install folder on Windows: the one holding this executable's
-/// `versions\<version>\` layout, where Hex keeps everything it produces (as
-/// Hex's `app_paths::managed_root` resolves it). `None` for a loose or copied
-/// `hex.exe`, which keeps the per-profile folders.
+/// Hex's data root on Windows: an installed version's root, or the folder a
+/// loose `hex.exe` sits in (as Hex's `app_paths::data_root` resolves it).
+/// Hex keeps everything it produces beside the executable.
 #[cfg(target_os = "windows")]
-pub fn hex_managed_root() -> Option<PathBuf> {
+pub fn hex_data_root() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
     let versions = exe.parent()?.parent()?;
-    versions
+    Some(if versions
         .file_name()?
         .eq_ignore_ascii_case("versions")
-        .then(|| versions.parent().map(Path::to_path_buf))?
+    {
+        versions.parent()?.to_path_buf()
+    } else {
+        exe.parent()?.to_path_buf()
+    })
 }
 
 /// Hex's support folder, as Hex's `app_paths::support_dir` resolves it: `~/Library/Application
-/// Support/hex` on macOS, `%APPDATA%\hex` on Windows — or a managed install's own folder, which
-/// keeps everything beside the install.
+/// Support/hex` on macOS, `%APPDATA%\hex` on Windows — or the folder beside the executable, which
+/// keeps everything the running Hex produces.
 pub fn hex_support_dir() -> PathBuf {
     std::env::var_os("HEX_APPLICATION_SUPPORT_DIR")
         .map(PathBuf::from)
         .filter(|dir| !dir.as_os_str().is_empty())
         .unwrap_or_else(|| {
             #[cfg(target_os = "windows")]
-            if let Some(root) = hex_managed_root() {
+            if let Some(root) = hex_data_root() {
                 return root;
             }
             scrawl_router::user_dirs::data_dir()

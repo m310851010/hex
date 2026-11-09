@@ -302,7 +302,7 @@ pub fn wide(text: &str) -> Vec<u16> {
 /// logs and machine-local state beside the install, where Hex keeps everything.
 pub fn local_dir() -> PathBuf {
     #[cfg(target_os = "windows")]
-    if let Some(root) = crate::transcribe::hex_managed_root() {
+    if let Some(root) = crate::transcribe::hex_data_root() {
         return root.join("scrawl");
     }
     scrawl_router::user_dirs::data_local_dir()

@@ -33,9 +33,10 @@ pub fn support_dir() -> Result<PathBuf> {
         return Ok(path.into());
     }
     #[cfg(windows)]
-    if let Some(root) = this_managed_root() {
-        // A managed install keeps everything it produces — settings,
-        // history, logs, models, downloads — beside the install itself.
+    if let Some(root) = this_data_root() {
+        // Hex keeps everything it produces — settings, history, logs,
+        // models, downloads — beside the running executable, whether it is
+        // an installed version or a loose build.
         return Ok(root);
     }
     let data =
@@ -51,7 +52,8 @@ pub fn support_dir() -> Result<PathBuf> {
 /// The folder holding this executable's `versions\<version>\` layout: the
 /// managed install's root. `None` unless the executable sits two folders
 /// below one named `versions`, so a loose or copied `hex.exe` — a build in
-/// `target\debug`, a download — stays on the per-profile folders.
+/// `target\debug`, a download — never claims to be an install the updater
+/// can replace (but its data still lives beside it, see `data_root`).
 #[cfg(windows)]
 pub fn managed_root(executable: &Path) -> Option<PathBuf> {
     let versions = executable.parent()?.parent()?;
@@ -61,12 +63,20 @@ pub fn managed_root(executable: &Path) -> Option<PathBuf> {
     Some(versions.parent()?.to_path_buf())
 }
 
-/// [`managed_root`] for the running executable.
+/// The folder that holds this executable's data: an installed version's
+/// root, or the folder the executable itself sits in for a loose build.
+/// Hex writes nothing outside this folder on Windows.
 #[cfg(windows)]
-fn this_managed_root() -> Option<PathBuf> {
+pub fn data_root(executable: &Path) -> Option<PathBuf> {
+    managed_root(executable).or_else(|| Some(executable.parent()?.to_path_buf()))
+}
+
+/// [`data_root`] for the running executable.
+#[cfg(windows)]
+fn this_data_root() -> Option<PathBuf> {
     std::env::current_exe()
         .ok()
-        .and_then(|executable| managed_root(&executable))
+        .and_then(|executable| data_root(&executable))
 }
 
 pub fn logs_dir() -> Result<PathBuf> {
@@ -80,34 +90,31 @@ pub fn models_dir() -> Result<PathBuf> {
     machine_local(&MODELS, "models")
 }
 
-/// `name` in the support folder, except on Windows, where logs and models
-/// belonged to this computer: `%LOCALAPPDATA%\hex`, not the Roaming
-/// `%APPDATA%\hex`, which managed networks copy to a server at every sign-in.
-/// A managed install keeps them beside the install instead, and an older
-/// Hex's `%LOCALAPPDATA%` copy moves over once — so models never download
+/// `name` beside the executable's data root, adopting an older Hex's
+/// `%LOCALAPPDATA%\hex` logs and models once — so models never download
 /// again after the update. While a move can't happen (a running Hex holds
 /// its files), the old copy keeps being used, so nothing downloads again.
 fn machine_local(cell: &std::sync::OnceLock<PathBuf>, name: &str) -> Result<PathBuf> {
     if let Some(path) = cell.get() {
         return Ok(path.clone());
     }
-    let roaming = support_dir()?.join(name);
+    let beside = support_dir()?.join(name);
     let path = match local_support_dir() {
-        Some(local) => move_once(&roaming, &local.join(name)),
-        None => adopt_machine_local(&roaming, name),
+        Some(local) => move_once(&beside, &local.join(name)),
+        None => adopt_machine_local(&beside, name),
     };
     Ok(cell.get_or_init(|| path).clone())
 }
 
-/// `%LOCALAPPDATA%\hex` on Windows, unless a data folder is chosen for this
-/// run (`HEX_APPLICATION_SUPPORT_DIR`) or this is a managed install, which
-/// keeps even its machine-local files beside the install. Elsewhere none.
+/// `%LOCALAPPDATA%\hex` on non-Windows and on Windows where a data folder
+/// is chosen for this run (`HEX_APPLICATION_SUPPORT_DIR`). A normal
+/// Windows executable keeps even its machine-local files beside itself.
 fn local_support_dir() -> Option<PathBuf> {
     if !cfg!(windows) || std::env::var_os("HEX_APPLICATION_SUPPORT_DIR").is_some() {
         return None;
     }
     #[cfg(windows)]
-    if this_managed_root().is_some() {
+    if this_data_root().is_some() {
         return None;
     }
     std::env::var_os("LOCALAPPDATA")
@@ -345,14 +352,21 @@ mod tests {
         let managed = root.join("Apps").join("Hex");
         fs::create_dir_all(managed.join(r"versions\1.0.0")).unwrap();
         let installed = managed.join(r"versions\1.0.0\hex.exe");
-        assert_eq!(managed_root(&installed), Some(managed));
-        // A build, and a loose or copied executable, keep the profile folders.
+        assert_eq!(managed_root(&installed), Some(managed.clone()));
+        assert_eq!(data_root(&installed), Some(managed));
+        // A build keeps its data beside the exe, but never claims to be an
+        // install the updater can replace.
         let built = root.join("checkout").join(r"target\debug\hex.exe");
         fs::create_dir_all(built.parent().unwrap()).unwrap();
         assert_eq!(managed_root(&built), None);
+        assert_eq!(
+            data_root(&built),
+            Some(built.parent().unwrap().to_path_buf())
+        );
         let loose = root.join("hex.exe");
         fs::write(&loose, b"").unwrap();
         assert_eq!(managed_root(&loose), None);
+        assert_eq!(data_root(&loose), Some(root.clone()));
         fs::remove_dir_all(root).unwrap();
     }
 

@@ -278,11 +278,13 @@ substitute for source inspection or a second roadmap.
   values only. Locked switches read off at load and keep their saved values on
   save; list-driven work checks the policy where it starts.
 - `app_paths`: the Application Support owner (`hex` on every OS) for runtime
-  logs and shared state. A managed Windows install keeps this beside the
-  install — the folder Setup chose, `%APPDATA%\hex` by default — adopting an
-  older Hex's `%LOCALAPPDATA%\hex` logs and models once; a loose or copied
-  `hex.exe` keeps the per-profile folders. The logs folder and its files are
-  owner-only on Unix (0700/0600, tightened when an older Hex left them open).
+  logs and shared state. On Windows Hex keeps this beside the running
+  executable — an installed version's root (the folder Setup chose,
+  `%APPDATA%\hex` by default) or a loose build's folder — adopting an older
+  Hex's `%LOCALAPPDATA%\hex` logs and models once; only the updater
+  distinguishes the `versions\<version>` layout from a loose exe. The logs
+  folder and its files are owner-only on Unix (0700/0600, tightened when an
+  older Hex left them open).
 - `desktop/onboarding`, `desktop/permission_guide`: required permission health, the native
   floating System Settings guide, selected dictation-model installation, the
   release startup gate, and opt-in command-model setup.
@@ -1773,12 +1775,12 @@ Tab to cycle, and `q`/Escape to quit.
   tracks, the rolling in-call transcript, and atomically published final
   transcripts.
 
-Windows keeps everything in the install folder — a managed install's
-`%APPDATA%\hex` by default, or the folder Setup chose — with logs and models
-beside the versions (`app_paths::machine_local` adopts an older Hex's
-`%LOCALAPPDATA%\hex` copy once); a loose `hex.exe` keeps `%APPDATA%\hex` with
-logs and models machine-local in `%LOCALAPPDATA%\hex`, so roaming profiles
-don't copy them. Linux uses
+Windows keeps everything beside the running executable — an installed
+version's root (`%APPDATA%\hex` by default, or the folder Setup chose), or a
+loose build's own folder — with logs and models beside the versions
+(`app_paths::machine_local` adopts an older Hex's `%LOCALAPPDATA%\hex` copy
+once). Hex writes nothing to `%APPDATA%` or `%LOCALAPPDATA%` on Windows
+outside that folder. Linux uses
 `~/.local/share/hex` (or under `XDG_DATA_HOME`). Hex keeps no compatibility with earlier `voice-control`
 folders or per-OS settings files.
 

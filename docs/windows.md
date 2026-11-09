@@ -196,10 +196,10 @@ settings, history, and the receipt beside `versions\`, and logs and speech
 models in `logs\` and `models\` (`app_paths::machine_local`), so the whole
 install — program and data — is one folder you can choose. An older Hex's
 `logs` and `models` move over once from `%LOCALAPPDATA%\hex`; while a running
-Hex holds them, the old copy stays in use. A loose `hex.exe` that isn't an
-installed layout keeps the per-profile folders (`%APPDATA%\hex`, and logs and
-models in `%LOCALAPPDATA%\hex`, which managed networks would copy to a server
-at every sign-in — models move to `%LOCALAPPDATA%\hex` there). Observations
+Hex holds them, the old copy stays in use. A loose `hex.exe` — a build in
+`target\release`, a downloaded copy — keeps its data beside itself in exactly
+the same way; only the updater distinguishes an installed `versions\<version>`
+layout (which it can replace) from a loose one (which it can't). Observations
 are in
 `logs\live.ndjson`, and native/runtime diagnostics are in `logs\process.log`,
 including every panic with its thread and backtrace. A worker that stops

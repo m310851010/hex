@@ -69,7 +69,7 @@ pub fn builtin_captures_dir() -> PathBuf {
         // A managed Hex install keeps its captures beside the install, adopting
         // an older Hex's `%LOCALAPPDATA%\scrawl\captures` once; a move that
         // fails leaves the old folder in place and in use.
-        if let Some(root) = crate::transcribe::hex_managed_root() {
+        if let Some(root) = crate::transcribe::hex_data_root() {
             return adopt_captures(root.join("captures"));
         }
         scrawl_router::user_dirs::data_local_dir()
