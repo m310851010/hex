@@ -95,6 +95,17 @@ pub enum VocabularyBoost {
 impl VocabularyBoost {
     pub const ALL: [Self; 4] = [Self::Off, Self::Light, Self::Normal, Self::Strong];
 
+    /// The English name the window's Vocabulary sheet shows; the caller
+    /// translates it.
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Off => "Off",
+            Self::Light => "Light",
+            Self::Normal => "Normal",
+            Self::Strong => "Strong",
+        }
+    }
+
     /// How much less likely than the heard words, in nats per term piece, a
     /// term may score and still replace them.
     fn nats(self) -> f32 {

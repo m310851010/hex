@@ -41,7 +41,9 @@ A feature with its own pane joins the sidebar as a normal item while
 on and is hidden while off; a behaviour-only feature is just its toggle. Today:
 Meetings (beta), Voice Filter (Dev; locked on while its macOS driver is
 installed, and a stable build with the driver keeps its pane for Uninstall
-alone), Playground (Dev), Live text, Live chapters, Vocabulary biasing, Switch
+alone), Playground (Dev), Modes pane (Dev; the sidebar item that edits
+replacements, websites, vocabulary, transformations, and the OpenCode
+rewrite), Live text, Live chapters, Vocabulary biasing, Switch
 model with keyboard language (#216), Mouse shortcuts (#209, macOS), Also
 pause the browser (#301, macOS), Share dictation shortcut (#176, Windows),
 Unload model when idle (#442), and Terminal paste (Windows). Externally contributed features land there too.

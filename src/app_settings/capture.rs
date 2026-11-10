@@ -64,6 +64,17 @@ impl CapsuleFlow {
         Self::Cursor,
         Self::Notch,
     ];
+
+    /// The English name the Annotate pane shows; the caller translates it.
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::List => "List",
+            Self::Toast => "Toast",
+            Self::MenuBar => "Menu bar",
+            Self::Cursor => "Cursor",
+            Self::Notch => "Notch",
+        }
+    }
 }
 
 #[cfg(hex_capture)]

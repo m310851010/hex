@@ -13,6 +13,7 @@ mod failures;
 mod french;
 mod labs;
 mod meetings;
+mod panes;
 mod portuguese;
 mod russian;
 mod text_language;
@@ -347,6 +348,7 @@ pub(super) fn all_translations() -> impl Iterator<Item = &'static (&'static str,
         .chain(meetings::TRANSLATIONS)
         .chain(labs::TRANSLATIONS)
         .chain(failures::TRANSLATIONS)
+        .chain(panes::TRANSLATIONS)
 }
 
 /// Columns: Polish, Chinese (Simplified), Japanese, German, Spanish, Ukrainian.

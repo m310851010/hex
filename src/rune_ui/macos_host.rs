@@ -546,6 +546,8 @@ struct MacHost {
     practice: Option<PracticeFeed>,
     /// The meetings folder panel, while it is open.
     folder_choice: Option<crate::desktop::file_dialog::Pending>,
+    /// The screenshots folder panel, while it is open.
+    screenshot_folder_choice: Option<crate::desktop::file_dialog::Pending>,
     calendar: CalendarFeed,
     /// Tracks System Settings return timing for Accessibility, System Audio,
     /// and Screen Recording.
@@ -575,6 +577,7 @@ impl MacHost {
             practice: None,
             folder_choice: None,
             calendar: CalendarFeed::default(),
+            screenshot_folder_choice: None,
             stale: Default::default(),
             resetting: [false; 3],
             reset_tx,
@@ -776,6 +779,11 @@ impl NativeHost for MacHost {
             PlatformRequest::SaveDotScope(tuning) => {
                 tuning.save().map_err(|error| format!("{error:#}"))?;
             }
+            PlatformRequest::ChooseScreenshotFolder => {
+                if self.screenshot_folder_choice.is_none() {
+                    self.screenshot_folder_choice = Some(choose_screenshot_folder());
+                }
+            }
             #[cfg(hex_capture)]
             PlatformRequest::Scrawl(request) => self.scrawl.send(request),
         }
@@ -828,6 +836,21 @@ impl NativeHost for MacHost {
                 Ok(Some(folder)) => self.folder_error = save_meetings_folder(folder).err(),
                 Ok(None) => {}
                 Err(error) => self.folder_error = Some(error),
+            }
+            changed = true;
+        }
+        if let Some(choice) = self
+            .screenshot_folder_choice
+            .as_ref()
+            .and_then(|p| p.poll())
+        {
+            self.screenshot_folder_choice = None;
+            match choice {
+                Ok(Some(folder)) => {
+                    state.screenshot_folder_error = save_screenshots_folder(folder).err()
+                }
+                Ok(None) => {}
+                Err(error) => state.screenshot_folder_error = Some(error),
             }
             changed = true;
         }
@@ -1341,6 +1364,33 @@ fn save_meetings_folder(folder: PathBuf) -> Result<(), String> {
     let mut settings =
         crate::app_settings::AppSettings::load().map_err(|error| format!("{error:#}"))?;
     settings.meetings.output_folder = Some(folder);
+    settings.save().map_err(|error| format!("{error:#}"))?;
+    if let Some(runtime) = crate::macos_rune::runtime() {
+        runtime
+            .send(Request::ReloadSettings)
+            .map_err(|error| format!("{error:#}"))?;
+    }
+    Ok(())
+}
+
+/// Opens the folder panel beside the window, starting at the current
+/// screenshots folder.
+fn choose_screenshot_folder() -> crate::desktop::file_dialog::Pending {
+    use crate::desktop::file_dialog::{Dialog, Target};
+    crate::desktop::file_dialog::open(
+        Dialog {
+            title: tr("Screenshots folder").into(),
+            target: Target::Folder,
+            directory: Some(crate::app_settings::screenshot_settings().folder()),
+        },
+        || crate::macos_rune::on_main_thread(|| {}),
+    )
+}
+
+fn save_screenshots_folder(folder: PathBuf) -> Result<(), String> {
+    let mut settings =
+        crate::app_settings::AppSettings::load().map_err(|error| format!("{error:#}"))?;
+    settings.screenshots.folder = Some(folder);
     settings.save().map_err(|error| format!("{error:#}"))?;
     if let Some(runtime) = crate::macos_rune::runtime() {
         runtime

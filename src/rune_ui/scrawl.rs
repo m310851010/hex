@@ -15,7 +15,7 @@ use super::lists::permission_control;
 use super::platform::{PlatformRequest, ScrawlRequest, ScrawlView};
 use super::settings::cancel_capture;
 use super::{Menu, ShortcutTarget, Ui};
-use crate::app_settings::{AppSettings, CaptureTranscriber};
+use crate::app_settings::{AppSettings, CapsuleFlow, CaptureTranscriber};
 use crate::desktop::i18n::{tr, tr_fill};
 use crate::desktop::onboarding::{PermissionAction, PermissionKind};
 
@@ -472,12 +472,52 @@ pub(super) fn pane(ui: &Ui, p: Paint, layer: &mut Vec<El>) -> El {
     if enabled {
         content = content.child(section(
             p,
+            "capsule",
+            tr("Capsule"),
+            vec![capsule_flow_row(ui, p, layer)],
+        ));
+        content = content.child(section(
+            p,
             "storage",
             tr("Storage"),
             storage_rows(ui, p, &view, layer),
         ));
     }
     super::scroll_body(p.k, "scroll", content)
+}
+
+/// How the recording capsule offers its destinations. Tuning that usually
+/// follows a prototype; the select keeps it out of the CLI.
+fn capsule_flow_row(ui: &Ui, p: Paint, layer: &mut Vec<El>) -> El {
+    let flow = ui.settings.capture.capsule_flow;
+    let control = super::general::pick_select(
+        ui,
+        p,
+        "capture-capsule-flow",
+        tr("Capsule flow"),
+        CapsuleFlow::ALL
+            .iter()
+            .map(|flow| tr(flow.label()))
+            .collect(),
+        CapsuleFlow::ALL
+            .iter()
+            .position(|choice| *choice == flow)
+            .unwrap_or_default(),
+        |ui, index| {
+            let flow = CapsuleFlow::ALL[index];
+            if ui.settings.capture.capsule_flow != flow {
+                ui.update(|settings| settings.capture.capsule_flow = flow);
+            }
+        },
+        layer,
+    );
+    setting_row(
+        p,
+        "capture-capsule-flow",
+        tr("Capsule flow"),
+        Some(tr("How the recording capsule offers its destinations")),
+        control,
+    )
 }
 
 #[cfg(test)]

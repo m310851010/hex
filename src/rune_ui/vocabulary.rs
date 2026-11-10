@@ -1,7 +1,7 @@
 //! Vocabulary: a sheet from General's Vocabulary row with one row per term
 //! and its "sounds like" spellings, edited in place and saved when typing
-//! pauses, like a mode's corrections. The boost has no control here; it
-//! stays a setting (`hex settings set vocabulary_boost`).
+//! pauses, like a mode's corrections. The sheet also picks how strongly
+//! transcription trades what it heard for these terms (`vocabulary_boost`).
 
 use rune::tok::motion::{SETTLE, SETTLE_EXIT};
 use rune::{El, SpringPair, TextEdit, Transition, Tx, col, edit_access, el, row, text};
@@ -147,6 +147,41 @@ pub(super) fn unused_note(ui: &Ui) -> Option<String> {
             model.name,
         )
     })
+}
+
+/// How strongly transcription trades what it heard for these terms: one
+/// segmented row under the sheet's heading.
+fn boost_row(ui: &Ui, p: Paint) -> El {
+    use crate::dictation::vocabulary::VocabularyBoost;
+    let labels: Vec<&str> = VocabularyBoost::ALL
+        .iter()
+        .map(|boost| tr(boost.label()))
+        .collect();
+    let selected = VocabularyBoost::ALL
+        .iter()
+        .position(|boost| *boost == ui.settings.vocabulary_boost)
+        .unwrap_or(2);
+    row()
+        .key("boost")
+        .gap(12.0)
+        .center_y()
+        .child(
+            text(tr("Bias"))
+                .key("boost-title")
+                .font(DESCRIPTION)
+                .color(p.muted()),
+        )
+        .child(super::controls::segmented(
+            p,
+            "vocabulary-boost",
+            &labels,
+            selected,
+            |ui, index| {
+                ui.update(|settings| {
+                    settings.vocabulary_boost = VocabularyBoost::ALL[index];
+                });
+            },
+        ))
 }
 
 /// How many terms the selected model reads, when that is fewer than the
@@ -358,6 +393,7 @@ pub(super) fn modal(ui: &Ui, p: Paint) -> Option<[El; 2]> {
                 .wrap(),
         );
     }
+    heading = heading.child(boost_row(ui, p));
     let mut panel = col()
         .key("vocabulary")
         .role("dialog")

@@ -153,6 +153,9 @@ impl Feature {
             Self::CapsLockDictation => {
                 "Press Caps Lock to start and stop dictation; its light shows when Hex records and transcribes"
             }
+            Self::ModesPane => {
+                "Settings' Modes pane, where replacements, transformations, and AI rewriting are edited directly"
+            }
         }
     }
 }

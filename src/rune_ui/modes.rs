@@ -82,6 +82,10 @@ struct Editor {
     prompt: TextEdit,
     deadline: TextEdit,
     replacements: Vec<(TextEdit, TextEdit)>,
+    /// The websites this mode applies to, one field each.
+    websites: Vec<TextEdit>,
+    /// The mode's own vocabulary: a term and its "sounds like" spellings.
+    vocabulary: Vec<(TextEdit, TextEdit)>,
 }
 
 impl Editor {
@@ -97,6 +101,21 @@ impl Editor {
                     (
                         TextEdit::new(r.matched_phrase.clone()),
                         TextEdit::new(r.output.clone()),
+                    )
+                })
+                .collect(),
+            websites: mode
+                .browser_hosts
+                .iter()
+                .map(|host| TextEdit::new(host.clone()))
+                .collect(),
+            vocabulary: mode
+                .vocabulary
+                .iter()
+                .map(|entry| {
+                    (
+                        TextEdit::new(entry.term.clone()),
+                        TextEdit::new(entry.sounds_like.join(", ")),
                     )
                 })
                 .collect(),
@@ -234,6 +253,21 @@ impl ModesPane {
                 output: output.text.clone(),
             })
             .collect();
+        mode.browser_hosts = editor
+            .websites
+            .iter()
+            .map(|host| host.text.trim().to_string())
+            .filter(|host| !host.is_empty())
+            .collect();
+        let mut vocabulary = Vec::new();
+        for (term, sounds_like) in &editor.vocabulary {
+            crate::dictation::vocabulary::add_clamped(
+                &mut vocabulary,
+                &term.text,
+                &crate::dictation::vocabulary::parse_sounds_like(&sounds_like.text),
+            );
+        }
+        mode.vocabulary = vocabulary;
         mode.post_processing.prompt = editor.prompt.text.trim().to_string();
         mode.post_processing.deadline_seconds = editor
             .deadline
@@ -394,6 +428,7 @@ fn add_mode(ui: &mut Ui) {
     );
     new.applications.clear();
     new.browser_hosts.clear();
+    new.vocabulary.clear();
     let index = ui.settings.dictation_processing.modes.len();
     if ui.update(|settings| settings.dictation_processing.modes.push(new)) {
         ui.modes.select_in(&ui.settings, Selection::Custom(index));
@@ -430,9 +465,47 @@ fn add_replacement(ui: &mut Ui) {
     }
 }
 
+/// Add website: a new focused field for one host this mode applies to.
+fn add_website(ui: &mut Ui) {
+    if update_mode(ui, |mode| mode.browser_hosts.push(String::new())) {
+        let mut website = TextEdit::default();
+        website.focused = true;
+        ui.modes.editor.websites.push(website);
+    }
+}
+
+/// Add term: a new focused vocabulary row for this mode.
+fn add_mode_term(ui: &mut Ui) {
+    if update_mode(ui, |mode| {
+        mode.vocabulary
+            .push(crate::dictation::vocabulary::VocabularyEntry {
+                term: String::new(),
+                sounds_like: Vec::new(),
+            })
+    }) {
+        let mut term = TextEdit::default();
+        term.focused = true;
+        ui.modes.editor.vocabulary.push((term, TextEdit::default()));
+    }
+}
+
 fn remove_replacement(ui: &mut Ui, index: usize) {
     if index < ui.modes.editor.replacements.len() {
         ui.modes.editor.replacements.remove(index);
+        ui.flush_drafts();
+    }
+}
+
+fn remove_website(ui: &mut Ui, index: usize) {
+    if index < ui.modes.editor.websites.len() {
+        ui.modes.editor.websites.remove(index);
+        ui.flush_drafts();
+    }
+}
+
+fn remove_mode_term(ui: &mut Ui, index: usize) {
+    if index < ui.modes.editor.vocabulary.len() {
+        ui.modes.editor.vocabulary.remove(index);
         ui.flush_drafts();
     }
 }
@@ -712,7 +785,11 @@ fn detail(ui: &Ui, p: Paint, layer: &mut Vec<El>) -> El {
     let current = mode(&ui.settings, selection);
     let mut content = page("mode-detail-content");
     content = content.child(basics(ui, p, selection, current));
+    if selection != Selection::Default {
+        content = content.child(websites(ui, p));
+    }
     content = content.child(corrections(ui, p));
+    content = content.child(mode_vocabulary(ui, p));
     content = content.child(processing(ui, p, selection, current, layer));
     content = content.child(transformations(ui, p, current, layer));
     if selection != Selection::Default {
@@ -1072,6 +1149,106 @@ fn corrections(ui: &Ui, p: Paint) -> El {
     section_with(p, "corrections", tr("Corrections"), add.mr(-4.0), rows)
 }
 
+/// The websites this custom mode applies to, one field each. The runtime
+/// matches a mode by the front tab's host before any app matches.
+fn websites(ui: &Ui, p: Paint) -> El {
+    let add = IconButton::new(PLUS)
+        .variant(IconButtonVariant::Ghost)
+        .control_size(ControlSize::Regular)
+        .label(tr("Add website"))
+        .on_press(add_website)
+        .build(p.k)
+        .key("add-website");
+    let mut rows = Vec::new();
+    if ui.modes.editor.websites.is_empty() {
+        rows.push(note(
+            "no-websites",
+            tr("No websites in this mode."),
+            p.muted(),
+        ));
+    }
+    for (index, website) in ui.modes.editor.websites.iter().enumerate() {
+        rows.push(
+            row()
+                .key(format!("website{index}"))
+                .px(METRICS.row_px)
+                .py(6.0)
+                .gap(8.0)
+                .center_y()
+                .child(
+                    TextInput::new(website)
+                        .placeholder(tr("Website host (e.g. github.com)"))
+                        .width(None)
+                        .on_edit(move |ui: &mut Ui| &mut ui.modes.editor.websites[index])
+                        .build(p.k)
+                        .key("host")
+                        .grow(1.0)
+                        .shrink(),
+                )
+                .child(remove_button(
+                    p,
+                    ControlSize::Regular,
+                    move |ui: &mut Ui| remove_website(ui, index),
+                )),
+        );
+    }
+    section_with(p, "websites", tr("Websites"), add.mr(-4.0), rows)
+}
+
+/// This mode's own vocabulary: names spelled ahead of the shared list while
+/// the mode applies.
+fn mode_vocabulary(ui: &Ui, p: Paint) -> El {
+    let add = IconButton::new(PLUS)
+        .variant(IconButtonVariant::Ghost)
+        .control_size(ControlSize::Regular)
+        .label(tr("Add term"))
+        .on_press(add_mode_term)
+        .build(p.k)
+        .key("add-mode-term");
+    let mut rows = Vec::new();
+    if ui.modes.editor.vocabulary.is_empty() {
+        rows.push(note(
+            "no-mode-vocabulary",
+            tr("No vocabulary in this mode; the shared list always applies."),
+            p.muted(),
+        ));
+    }
+    for (index, (term, sounds_like)) in ui.modes.editor.vocabulary.iter().enumerate() {
+        rows.push(
+            row()
+                .key(format!("mode-term{index}"))
+                .px(METRICS.row_px)
+                .py(6.0)
+                .gap(8.0)
+                .center_y()
+                .child(
+                    TextInput::new(term)
+                        .placeholder(tr("Term (e.g. cappuccino)"))
+                        .width(Some(200.0))
+                        .on_edit(move |ui: &mut Ui| &mut ui.modes.editor.vocabulary[index].0)
+                        .build(p.k)
+                        .key("mode-term"),
+                )
+                .child(
+                    TextInput::new(sounds_like)
+                        .placeholder(tr("Sounds like (e.g. capuchin, cap a chino)"))
+                        .width(None)
+                        .on_edit(move |ui: &mut Ui| &mut ui.modes.editor.vocabulary[index].1)
+                        .build(p.k)
+                        .key("mode-sounds-like")
+                        .grow(1.0)
+                        .shrink(),
+                )
+                .child(remove_button(
+                    p,
+                    ControlSize::Regular,
+                    move |ui: &mut Ui| remove_mode_term(ui, index),
+                )),
+        );
+    }
+    section_with(p, "mode-vocabulary", tr("Vocabulary"), add.mr(-4.0), rows)
+}
+
 fn processing(
     ui: &Ui,
     p: Paint,
@@ -1266,6 +1443,7 @@ fn fixture_icon(rgb: [u8; 3]) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::reorder_transformation;
+    use super::*;
 
     #[test]
     fn transformations_reorder_in_both_directions() {
@@ -1282,5 +1460,60 @@ mod tests {
         assert!(!reorder_transformation(&mut transformations, "one", 0));
         assert!(!reorder_transformation(&mut transformations, "missing", 1));
         assert_eq!(transformations, ["one", "two"]);
+    }
+
+    #[test]
+    fn the_editor_projects_websites_vocabulary_and_the_rewrite() {
+        let mut settings = AppSettings::default();
+        settings.dictation_processing.default_mode.browser_hosts =
+            vec!["github.com".into(), "  ".into()];
+        settings.dictation_processing.default_mode.vocabulary =
+            vec![crate::dictation::vocabulary::VocabularyEntry {
+                term: "Rune".into(),
+                sounds_like: vec!["roon".into()],
+            }];
+        let mut pane = ModesPane::new(&settings);
+        pane.editor.websites[1] = TextEdit::new("  ");
+        pane.editor.websites.push(TextEdit::new(" gitlab.com "));
+        pane.editor.prompt = TextEdit::new("  Drop fillers.  ");
+        pane.editor.deadline = TextEdit::new("12");
+        pane.editor.vocabulary[0].1 = TextEdit::new("roon, rune app");
+
+        pane.project(&mut settings);
+        let mode = &settings.dictation_processing.default_mode;
+        assert_eq!(mode.browser_hosts, ["github.com", "gitlab.com"]);
+        assert_eq!(mode.post_processing.prompt, "Drop fillers.");
+        assert_eq!(mode.post_processing.deadline_seconds, 12);
+        assert_eq!(mode.vocabulary.len(), 1);
+        assert_eq!(mode.vocabulary[0].term, "Rune");
+        assert_eq!(mode.vocabulary[0].sounds_like, ["roon", "rune app"]);
+    }
+
+    #[test]
+    fn a_bad_deadline_keeps_the_saved_one() {
+        let settings = AppSettings::default();
+        let mut pane = ModesPane::new(&settings);
+        pane.editor.deadline = TextEdit::new("not a number");
+        let mut settings = settings;
+        pane.project(&mut settings);
+        assert_eq!(
+            settings
+                .dictation_processing
+                .default_mode
+                .post_processing
+                .deadline_seconds,
+            30
+        );
+        pane.editor.deadline = TextEdit::new("0");
+        pane.project(&mut settings);
+        assert_eq!(
+            settings
+                .dictation_processing
+                .default_mode
+                .post_processing
+                .deadline_seconds,
+            1,
+            "zero clamps to one second"
+        );
     }
 }

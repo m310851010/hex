@@ -77,6 +77,9 @@ pub struct LabsSettings {
     /// A Caps Lock press starts and stops dictation, and its light follows
     /// Hex's recording and processing (macOS).
     pub caps_lock_dictation: bool,
+    /// Settings' Modes pane joins the sidebar, where dictation processing is
+    /// edited directly.
+    pub modes_pane: bool,
     pub movable_meeting_capsules: bool,
     /// A paste restores the clipboard through a running XWayland on Wayland desktops without data-control, such as GNOME (Linux, issue 1111).
     pub gnome_clipboard_restore: bool,
@@ -154,6 +157,7 @@ impl Default for LabsSettings {
             hide_menu_bar_icon: false,
             quit_closes_window: false,
             caps_lock_dictation: false,
+            modes_pane: false,
             movable_meeting_capsules: false,
             gnome_clipboard_restore: false,
             meeting_notes_vocabulary: false,

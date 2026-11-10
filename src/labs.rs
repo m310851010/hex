@@ -119,10 +119,11 @@ pub enum Feature {
     QuitClosesWindow,
     ExpireMeetingAudio,
     CapsLockDictation,
+    ModesPane,
 }
 
 impl Feature {
-    pub const ALL: [Self; 56] = [
+    pub const ALL: [Self; 57] = [
         Self::Meetings,
         Self::VoiceFilter,
         Self::Playground,
@@ -179,6 +180,7 @@ impl Feature {
         Self::QuitClosesWindow,
         Self::ExpireMeetingAudio,
         Self::CapsLockDictation,
+        Self::ModesPane,
     ];
 
     /// The features this OS and build have.
@@ -205,7 +207,7 @@ impl Feature {
             // Developer tools: the story browser, and the virtual microphone
             // (a stable build keeps only its Uninstall while the driver is
             // installed).
-            Self::VoiceFilter | Self::Playground => Audience::Dev,
+            Self::VoiceFilter | Self::Playground | Self::ModesPane => Audience::Dev,
             Self::Meetings
             | Self::LiveText
             | Self::FailureNotices
@@ -320,6 +322,7 @@ impl Feature {
             | Self::CapsLockDictation
             | Self::ExpireMeetingAudio
             | Self::FailureNotices => 20261107,
+            Self::ModesPane => 20261111,
         }
     }
 
@@ -415,7 +418,8 @@ impl Feature {
             | Self::MoreCallApps
             | Self::ExpireMeetingAudio
             | Self::SettingsSearch
-            | Self::FillerWords => true,
+            | Self::FillerWords
+            | Self::ModesPane => true,
         }
     }
 
@@ -478,6 +482,7 @@ impl Feature {
             Self::QuitClosesWindow => "quit-closes-window",
             Self::ExpireMeetingAudio => "expire-meeting-audio",
             Self::CapsLockDictation => "caps-lock-dictation",
+            Self::ModesPane => "modes-pane",
         }
     }
 
@@ -540,6 +545,7 @@ impl Feature {
             Self::QuitClosesWindow => "labs.quit_closes_window",
             Self::ExpireMeetingAudio => "labs.expire_meeting_audio",
             Self::CapsLockDictation => "labs.caps_lock_dictation",
+            Self::ModesPane => "labs.modes_pane",
         }
     }
 
@@ -606,6 +612,7 @@ impl Feature {
             Self::QuitClosesWindow => settings.labs.quit_closes_window,
             Self::ExpireMeetingAudio => settings.labs.expire_meeting_audio,
             Self::CapsLockDictation => settings.labs.caps_lock_dictation,
+            Self::ModesPane => settings.labs.modes_pane,
         }
     }
 
@@ -670,6 +677,7 @@ impl Feature {
             &mut labs.quit_closes_window,
             &mut labs.expire_meeting_audio,
             &mut labs.caps_lock_dictation,
+            &mut labs.modes_pane,
         ]
     }
 
@@ -734,6 +742,7 @@ impl Feature {
             Self::QuitClosesWindow => settings.labs.quit_closes_window = on,
             Self::ExpireMeetingAudio => settings.labs.expire_meeting_audio = on,
             Self::CapsLockDictation => settings.labs.caps_lock_dictation = on,
+            Self::ModesPane => settings.labs.modes_pane = on,
             // Off, no shortcut keeps a key only the feature allows.
             Self::StandaloneSpecialKeys => {
                 settings.labs.standalone_special_keys = on;
@@ -799,6 +808,8 @@ const MEETING_DESCRIPTIVE_FILENAMES: u64 = LIVE_TYPING << 1;
 const FAILURE_NOTICES: u64 = MEETING_DESCRIPTIVE_FILENAMES << 1;
 /// The next bit above Failure notices' switch.
 const CAPS_LOCK_DICTATION: u64 = FAILURE_NOTICES << 1;
+/// The next bit above Caps Lock dictation's switch.
+const MODES_PANE: u64 = CAPS_LOCK_DICTATION << 1;
 
 /// This process's `labs` switches: unknown until settings load or one is
 /// first read.
@@ -1058,6 +1069,12 @@ pub fn meeting_descriptive_filenames() -> bool {
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub fn caps_lock_dictation() -> bool {
     on(CAPS_LOCK_DICTATION) && Feature::CapsLockDictation.on_this_os()
+}
+
+/// Settings' Modes pane joins the sidebar while on (read as the sidebar
+/// lists its items).
+pub fn modes_pane() -> bool {
+    on(MODES_PANE) && Feature::ModesPane.on_this_os()
 }
 
 /// Finished meetings may drop their WAV tracks on `meetings.audio_retention`

@@ -97,7 +97,8 @@ impl Pane {
     pub(super) fn shown(self, ui: &Ui) -> bool {
         let caps = ui.platform.caps;
         match self {
-            Pane::Modes | Pane::HudLab | Pane::Activity => false,
+            Pane::Modes => crate::labs::modes_pane(),
+            Pane::HudLab | Pane::Activity => false,
             Pane::Meetings => caps.meetings && meetings::available(ui),
             // On from Labs (dev builds), or while its driver is installed.
             Pane::VoiceFilter => caps.fun && fun::running(ui),

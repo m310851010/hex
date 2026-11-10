@@ -3,8 +3,9 @@
 
 use rune::{El, col, row, text};
 
-use super::super::controls::{ButtonKind, DESCRIPTION, Paint, button};
+use super::super::controls::{ButtonKind, DESCRIPTION, Paint, button, note};
 use super::super::general::keys_button;
+use super::super::platform::PlatformRequest;
 use super::super::{ShortcutTarget, Ui};
 use crate::desktop::i18n::tr;
 
@@ -27,8 +28,22 @@ pub(super) fn body(ui: &Ui, p: Paint, system_takes_shortcut: bool) -> El {
             p,
             "screenshot-folder",
             tr("Saves to"),
-            text(folder).key("value").font(DESCRIPTION).color(p.text()),
+            row()
+                .key("folder-value")
+                .gap(8.0)
+                .center_y()
+                .child(text(folder).key("value").font(DESCRIPTION).color(p.text()))
+                .child(button(
+                    p,
+                    "choose-screenshot-folder",
+                    tr("Change folder"),
+                    ButtonKind::Secondary,
+                    |ui: &mut Ui, _| ui.ask(PlatformRequest::ChooseScreenshotFolder),
+                )),
         ));
+    if let Some(error) = &ui.platform.screenshot_folder_error {
+        body = body.child(note("screenshot-folder-error", error, p.danger()));
+    }
     if system_takes_shortcut {
         body = body.child(
             col()

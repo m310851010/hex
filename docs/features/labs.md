@@ -952,6 +952,23 @@ in [rune_ui/tests.rs](../../src/rune_ui/tests.rs) and
 in a real window; the Labs page goldens need regenerating on Linux with the
 new row (the Output goldens keep the toggle off and are unchanged).
 
+Modes pane (`modes_pane`, issue —, dev builds): Settings' Modes pane joins
+the sidebar (between Output and History), where dictation processing is
+edited directly instead of through an agent: a mode's corrections, its
+websites, its own vocabulary, the transformation order, and the OpenCode
+rewrite (toggle, model, thinking variant, instructions, deadline) — the
+Global mode included. The pane was built for this and then hidden from the
+sidebar (`ce6f62e8` gated the experimental panes); the lab only unhides it
+(`Pane::Modes.shown` reads `labs.modes_pane` in
+[rune_ui/sidebar.rs](../../src/rune_ui/sidebar.rs) and
+[rune_ui/labs.rs](../../src/rune_ui/labs.rs) `main_panes`). Off, the sidebar
+is exactly as before and processing stays an agent's job through Edit with
+agent. Checks: `the_modes_pane_joins_the_sidebar_with_its_lab` in
+[rune_ui/tests.rs](../../src/rune_ui/tests.rs) and the Modes editor's
+projection tests in [rune_ui/modes.rs](../../src/rune_ui/modes.rs). Not yet
+observed: the pane in a real window; the Labs goldens need regenerating on
+Linux with the new row.
+
 Model in use first (`picker-active-first`, issue 1019, every OS): while on,
 the speech model picker remembers the saved model when it opens, only if it
 is installed (`Picker::in_use_first`, set in `picker::open`, cleared in

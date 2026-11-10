@@ -2051,7 +2051,10 @@ fn the_vocabulary_row_opens_its_sheet() {
     settle(&mut rt);
     assert!(rt.state.vocabulary.open);
     assert!(rt.find("add-term").is_some());
-    assert!(rt.find("vocabulary-boost").is_none());
+    assert!(
+        rt.find("vocabulary-boost").is_some(),
+        "the sheet picks the bias"
+    );
     key(&mut rt, Key::Escape, Mods::default());
     settle(&mut rt);
     assert!(!rt.state.vocabulary.open);
@@ -2873,6 +2876,27 @@ fn the_recorder_still_gets_space_and_enter_after_a_menu_closes() {
 
 /// The trust prompt shows what an unapproved config reaches, and Allow
 /// pins this config's hash and hides it.
+/// The Modes pane joins the sidebar only with its Labs switch on, and
+/// leaves it when the switch goes off.
+#[test]
+fn the_modes_pane_joins_the_sidebar_with_its_lab() {
+    let mut rt = runtime("general", true, TALL_SIZE);
+    assert!(rt.find("nav-modes").is_none(), "hidden by default");
+    open_labs(&mut rt);
+    tap(&mut rt, "lab-modes-pane");
+    assert!(rt.state.settings.labs.modes_pane);
+    settle(&mut rt);
+    assert!(rt.find("nav-modes").is_some());
+    tap(&mut rt, "nav-modes");
+    settle(&mut rt);
+    assert!(rt.find("mode-detail").is_some(), "the Modes pane renders");
+    open_labs(&mut rt);
+    tap(&mut rt, "lab-modes-pane");
+    assert!(!rt.state.settings.labs.modes_pane);
+    settle(&mut rt);
+    assert!(rt.find("nav-modes").is_none(), "leaves with the lab");
+}
+
 #[test]
 fn the_trust_prompt_lists_what_a_config_reaches_until_it_is_allowed() {
     let mut rt = runtime("output-trust", false, PANE_SIZE);

@@ -435,6 +435,11 @@ const KEYS: &[Key] = &[
         "Labs: a Caps Lock press starts and stops dictation hands-free, and its light shows when Hex records and transcribes; Caps Lock stays off so typing is unchanged (macOS)",
     ),
     key(
+        "labs.modes_pane",
+        Kind::Bool,
+        "Labs: Settings' Modes pane joins the sidebar, where replacements, transformations, and AI rewriting are edited directly (dev builds)",
+    ),
+    key(
         "labs.notch_indicator",
         Kind::Bool,
         "Labs: on a screen with a notch, the recording indicator grows out of the notch at either visible position; Hidden still hides it, and flat screens keep the Top or Bottom setting (macOS)",

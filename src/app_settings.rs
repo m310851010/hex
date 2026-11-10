@@ -2372,6 +2372,9 @@ mod tests {
         let mut settings = AppSettings {
             show_dock_icon: false,
             microphone: Some("Test microphone".into()),
+            // The default recommendation follows the system language; pin
+            // the English one, so the model set is the same everywhere.
+            transcription: TranscriptionSelection::default(),
             ..Default::default()
         };
         settings.remember_transcription(french.clone());
@@ -2436,6 +2439,10 @@ mod tests {
     #[test]
     fn invalid_remembered_languages_are_not_offered_by_model_switching() {
         let mut settings = AppSettings {
+            // The default recommendation follows the system language; pin
+            // the English one, so the fallback language is the same here as
+            // anywhere.
+            transcription: TranscriptionSelection::default(),
             transcription_recents: vec![
                 TranscriptionSelection {
                     model: TranscriptionModelId::ParakeetV2,

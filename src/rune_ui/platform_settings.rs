@@ -17,8 +17,8 @@ use super::platform::{CalendarRequest, MeetingRequest, NotesAvailability, Os, Pl
 use super::settings::toggle_menu;
 use super::{Menu, Pane, ShortcutTarget, Ui, icons};
 use crate::app_settings::{
-    AppSettings, CALENDAR_LEAD_MINUTES, HotkeyBinding, MeetingPolicy, MeetingProviderChoice,
-    MeetingRetention, MeetingSummaries, ModifierSide,
+    AppSettings, CALENDAR_LEAD_MINUTES, HotkeyBinding, MeetingIndicatorCorner, MeetingPolicy,
+    MeetingProviderChoice, MeetingRetention, MeetingSummaries, ModifierSide,
 };
 use crate::audio::hex_microphone::DriverActionState;
 use crate::calendar::{CalendarAccess, CallProvider};
@@ -508,6 +508,7 @@ pub(super) fn meetings_settings(ui: &Ui, p: Paint, layer: &mut Vec<El>) -> Vec<E
             },
         ));
         after.extend(summaries_rows(ui, p, layer));
+        after.push(indicator_corner_row(ui, p, layer).into());
         after.push(retention_row(ui, p, layer).into());
         if ui.settings.labs.expire_meeting_audio {
             after.push(audio_retention_row(ui, p, layer).into());
@@ -562,6 +563,41 @@ pub(super) fn meetings_settings(ui: &Ui, p: Paint, layer: &mut Vec<El>) -> Vec<E
 }
 
 /// How long finished meetings are kept before they move to the Trash.
+fn indicator_corner_row(ui: &Ui, p: Paint, layer: &mut Vec<El>) -> El {
+    let corner = ui.settings.meetings.recording_indicator_corner;
+    let control = super::general::pick_select(
+        ui,
+        p,
+        "meeting-indicator-corner",
+        tr("Indicator corner"),
+        MeetingIndicatorCorner::ALL
+            .iter()
+            .map(|corner| tr(corner.label()))
+            .collect(),
+        MeetingIndicatorCorner::ALL
+            .iter()
+            .position(|choice| *choice == corner)
+            .unwrap_or_default(),
+        |ui, index| {
+            let corner = MeetingIndicatorCorner::ALL[index];
+            if ui.settings.meetings.recording_indicator_corner != corner {
+                ui.update(|settings| settings.meetings.recording_indicator_corner = corner);
+            }
+        },
+        layer,
+    );
+    icon_row(
+        p,
+        "meeting-indicator-corner",
+        &icons::PILL,
+        tr("Indicator corner"),
+        Some(tr(
+            "Where the recording pill sits; dragging it there saves the same setting",
+        )),
+        control,
+    )
+}
+
 fn retention_row(ui: &Ui, p: Paint, layer: &mut Vec<El>) -> El {
     let chosen = ui.settings.meetings.retention;
     let retention = chosen.unwrap_or(MeetingRetention::DEFAULT);

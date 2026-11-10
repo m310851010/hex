@@ -29,10 +29,14 @@ pub(super) static LABS_ICON: Icon = Icon {
 };
 
 /// The main sidebar's panes, in order: General, Output, History, then the
-/// features turned on (Meetings and Voice Filter from Labs, Annotate in dev
-/// builds).
+/// features turned on (Modes from Labs, Meetings and Voice Filter from
+/// Labs, Annotate in dev builds).
 pub(super) fn main_panes(ui: &Ui) -> Vec<Pane> {
-    let mut panes = vec![Pane::General, Pane::Output, Pane::History];
+    let mut panes = vec![Pane::General, Pane::Output];
+    if Pane::Modes.shown(ui) {
+        panes.push(Pane::Modes);
+    }
+    panes.push(Pane::History);
     #[cfg(hex_capture)]
     let optional = [Pane::Meetings, Pane::Annotate, Pane::VoiceFilter];
     #[cfg(not(hex_capture))]
@@ -667,6 +671,12 @@ fn rows(ui: &Ui) -> Vec<Row> {
         tr("Offer Vocabulary and Fix this beside Output's Try result, to correct a wrong result"),
     ));
     rows.push(row(
+        Feature::ModesPane,
+        Some(Pane::Modes.icon()),
+        tr("Modes pane"),
+        tr("Settings' Modes pane joins the sidebar, where replacements, transformations, and AI rewriting are edited directly"),
+    ));
+    rows.push(row(
         Feature::PickerSortFilter,
         None,
         tr("Sort and filter models"),
@@ -812,6 +822,7 @@ fn row_key(lab: Lab) -> &'static str {
         Feature::MeetingImport => "lab-meeting-import",
         Feature::MeetingDescriptiveFilenames => "lab-meeting-descriptive-filenames",
         Feature::ExpireMeetingAudio => "lab-expire-meeting-audio",
+        Feature::ModesPane => "lab-modes-pane",
     }
 }
 

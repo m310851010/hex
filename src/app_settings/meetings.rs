@@ -16,6 +16,24 @@ pub enum MeetingIndicatorCorner {
 }
 
 impl MeetingIndicatorCorner {
+    pub const ALL: [Self; 4] = [
+        Self::TopRight,
+        Self::TopLeft,
+        Self::BottomRight,
+        Self::BottomLeft,
+    ];
+
+    /// The English name the window's Meetings settings show; the caller
+    /// translates it.
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::TopRight => "Top right",
+            Self::TopLeft => "Top left",
+            Self::BottomRight => "Bottom right",
+            Self::BottomLeft => "Bottom left",
+        }
+    }
+
     pub const fn is_right(self) -> bool {
         matches!(self, Self::TopRight | Self::BottomRight)
     }

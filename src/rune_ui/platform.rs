@@ -300,6 +300,9 @@ pub(super) struct PlatformState {
     pub(super) notes: NotesAvailability,
     /// A meeting folder that could not be revealed or chosen.
     pub(super) meeting_folder_error: Option<String>,
+    /// A screenshot folder that could not be chosen (macOS).
+    #[cfg(target_os = "macos")]
+    pub(super) screenshot_folder_error: Option<String>,
     /// The Calendar card's access, calendars, and next meetings.
     pub(super) calendar: CalendarView,
     /// The tour's relaunch failed; the person must reopen Hex.
@@ -397,6 +400,8 @@ impl PlatformState {
             hex_microphone: None,
             notes: NotesAvailability::Available,
             meeting_folder_error: None,
+            #[cfg(target_os = "macos")]
+            screenshot_folder_error: None,
             calendar: CalendarView::default(),
             relaunch_failed: false,
             paste: None,
@@ -617,6 +622,9 @@ pub(super) enum PlatformRequest {
     /// Save Dot scope's tuning as `dot-scope.json`, which the HUD loads at
     /// launch.
     SaveDotScope(crate::rune_hud::dot_scope::Tuning),
+    /// Choose where Labs › Screenshots saves (macOS).
+    #[cfg(target_os = "macos")]
+    ChooseScreenshotFolder,
     #[cfg(hex_capture)]
     Scrawl(ScrawlRequest),
 }
