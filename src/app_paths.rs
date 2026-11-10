@@ -141,8 +141,11 @@ fn adopt_machine_local(roaming: &Path, _name: &str) -> PathBuf {
     roaming.to_path_buf()
 }
 
-/// `local`, after moving `roaming` there if only `roaming` exists. A move that
-/// fails leaves `roaming` in place and in use.
+/// `local`, after moving `roaming` there if only `roaming` exists. A move
+/// that fails leaves `roaming` in place and in use. Renaming works only
+/// within a volume, so a move across volumes (the old `%LOCALAPPDATA%` copy
+/// to an exe on another drive) copies through a `.partial` folder first and
+/// deletes the source only once the copy is complete and renamed into place.
 fn move_once(roaming: &Path, local: &Path) -> PathBuf {
     if local.exists() || !roaming.exists() {
         return local.to_path_buf();
@@ -150,11 +153,39 @@ fn move_once(roaming: &Path, local: &Path) -> PathBuf {
     let moved = local
         .parent()
         .map_or(Ok(()), fs::create_dir_all)
-        .and_then(|()| fs::rename(roaming, local));
+        .and_then(|()| fs::rename(roaming, local))
+        .or_else(|_| move_across(roaming, local));
     match moved {
         Ok(()) => local.to_path_buf(),
         Err(_) => roaming.to_path_buf(),
     }
+}
+
+/// Copies `roaming` into place at `local` through a `.partial` folder, then
+/// deletes `roaming` — a rename's result, but working across volumes. The
+/// `.partial` name, so a crash mid-copy never leaves a half-copied folder
+/// that looks finished; a later run finds no `local` and copies again.
+fn move_across(roaming: &Path, local: &Path) -> std::io::Result<()> {
+    let partial = local.with_extension("partial");
+    let _ = fs::remove_dir_all(&partial);
+    copy_dir(roaming, &partial)
+        .and_then(|()| fs::rename(&partial, local))
+        .and_then(|()| fs::remove_dir_all(roaming))
+}
+
+/// Copies a whole folder, files and subfolders, preserving contents.
+fn copy_dir(source: &Path, dest: &Path) -> std::io::Result<()> {
+    fs::create_dir_all(dest)?;
+    for entry in fs::read_dir(source)? {
+        let entry = entry?;
+        let target = dest.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            copy_dir(&entry.path(), &target)?;
+        } else {
+            fs::copy(entry.path(), &target)?;
+        }
+    }
+    Ok(())
 }
 
 /// Creates `directory` readable only by this user, and tightens it if an
@@ -384,6 +415,41 @@ mod tests {
         );
         assert!(roaming.exists());
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn a_move_across_volumes_copies_through_a_partial_folder() {
+        // Rename cannot move a folder between volumes, which the old
+        // `%LOCALAPPDATA%` copy to an exe on another drive always is.
+        let root = std::env::temp_dir().join(format!("hex-cross-{}", std::process::id()));
+        let roaming = root.join("models");
+        fs::create_dir_all(roaming.join("nested")).unwrap();
+        fs::write(roaming.join("model.gguf"), b"weights").unwrap();
+        fs::write(roaming.join("nested").join("kept.txt"), b"kept").unwrap();
+        // Another volume when the machine has one; the fallback path itself
+        // works the same within one.
+        let drive = ["D:\\", "E:\\"]
+            .into_iter()
+            .find(|drive| {
+                std::path::Path::new(drive).is_dir() && !std::env::temp_dir().starts_with(drive)
+            })
+            .map(PathBuf::from)
+            .unwrap_or_else(|| root.clone());
+        let dest = drive
+            .join(format!("hex-xvol-{}", std::process::id()))
+            .join("models");
+        let _ = fs::remove_dir_all(dest.parent().unwrap());
+
+        move_across(&roaming, &dest).unwrap();
+        assert_eq!(fs::read(dest.join("model.gguf")).unwrap(), b"weights");
+        assert_eq!(
+            fs::read(dest.join("nested").join("kept.txt")).unwrap(),
+            b"kept"
+        );
+        assert!(!roaming.exists(), "the source is deleted once copied");
+        assert!(!dest.with_extension("partial").exists());
+        fs::remove_dir_all(root).unwrap();
+        fs::remove_dir_all(dest.parent().unwrap()).unwrap();
     }
 
     #[cfg(unix)]
