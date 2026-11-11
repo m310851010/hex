@@ -2917,6 +2917,33 @@ fn a_direct_provider_needs_no_opencode_catalog() {
     assert!(rt.find("opencode-model").is_none(), "no OpenCode picker");
 }
 
+/// Fetching models replaces the comma-joined line with a searchable
+/// dropdown; choosing one saves the model id. Window tests run on Linux.
+#[cfg(target_os = "linux")]
+#[test]
+fn direct_models_open_in_a_searchable_dropdown() {
+    let mut rt = runtime("modes", true, PANE_SIZE);
+    rt.state.settings.llm = crate::app_settings::LlmSettings::for_provider(
+        crate::app_settings::LlmProvider::OpenAi,
+        "sk-test",
+    );
+    rt.state.models.direct_models = vec![
+        "gpt-4o".into(),
+        "gpt-4o-mini".into(),
+        "deepseek-chat".into(),
+    ];
+    rt.invalidate();
+    settle(&mut rt);
+    assert!(rt.find("llm-models").is_none(), "no comma-joined line");
+    tap(&mut rt, "llm-model-chevron");
+    settle(&mut rt);
+    assert!(rt.find("llm-model-picker-content").is_some());
+    assert!(rt.find("llm-model-picker-option-2").is_some());
+    tap(&mut rt, "llm-model-picker-option-2");
+    flush(&mut rt);
+    assert_eq!(rt.state.settings.llm.model, "deepseek-chat");
+}
+
 #[test]
 fn the_trust_prompt_lists_what_a_config_reaches_until_it_is_allowed() {
     let mut rt = runtime("output-trust", false, PANE_SIZE);

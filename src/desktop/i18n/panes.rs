@@ -42,4 +42,5 @@ pub(super) const TRANSLATIONS: &[(&str, [&str; 6])] = &[
     ("Stored in settings.json as plain text", ["Przechowywany w settings.json jako zwykły tekst", "以明文存储在 settings.json 中", "settings.json に平文で保存されます", "Als Klartext in settings.json gespeichert", "Guardado como texto plano en settings.json", "Зберігається у settings.json відкритим текстом"]),
     ("OpenCode service, or a direct endpoint you configure", ["Usługa OpenCode albo własny endpoint", "OpenCode 服务，或你配置的直连端点", "OpenCode サービス、または設定した直接エンドポイント", "OpenCode-Dienst oder ein selbst konfigurierter Endpunkt", "Servicio OpenCode o un endpoint directo que configures", "Служба OpenCode або власна кінцева точка"]),
     ("Describe how the model should rewrite your dictation…", ["Opisz, jak model ma przepisywać dyktowanie…", "描述模型应如何改写你的听写…", "音声入力をどう書き換えるか記述…", "Beschreibe, wie das Modell dein Diktat umschreiben soll…", "Describe cómo el modelo debe reescribir tu dictado…", "Опишіть, як модель має переписувати диктування…"]),
+    ("Search models", ["Szukaj modeli", "搜索模型", "モデルを検索", "Modelle suchen", "Buscar modelos", "Пошук моделей"]),
 ];

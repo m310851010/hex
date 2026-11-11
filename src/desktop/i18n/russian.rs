@@ -1220,6 +1220,7 @@ const TRANSLATIONS: &[(&str, &str)] = &[
     ("Stored in settings.json as plain text", "Хранится в settings.json в открытом виде"),
     ("OpenCode service, or a direct endpoint you configure", "Служба OpenCode или самостоятельно настроенная конечная точка"),
     ("Describe how the model should rewrite your dictation…", "Опишите, как модель должна переписывать диктовку…"),
+    ("Search models", "Поиск моделей"),
 ];
 
 #[cfg(test)]

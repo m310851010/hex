@@ -131,15 +131,70 @@ pub(super) fn processing(
             })
             .build(p.k)
             .key("llm-model-field");
-        let mut model_row = setting_row(p, "llm-model", tr("Model"), None, model_field);
-        if !ui.models.direct_models.is_empty() {
-            model_row = model_row.child(note(
-                "llm-models",
-                &ui.models.direct_models.join(", "),
-                p.muted(),
-            ));
-        }
-        rows.push(model_row);
+        // A chevron beside the hand-typed field opens a searchable list of
+        // the endpoint's model ids, once fetched. The Combobox owns the
+        // chevron as its trigger, so the popover anchors beside the field.
+        let chevron = button(
+            p,
+            "llm-model-chevron",
+            "⌄",
+            ButtonKind::Secondary,
+            |_: &mut Ui, _| {},
+        )
+        .disabled(ui.models.direct_models.is_empty());
+        let options: Vec<_> = ui
+            .models
+            .direct_models
+            .iter()
+            .enumerate()
+            .map(|(index, model)| rune_kit::ComboboxOption::new(index.to_string(), model.clone()))
+            .collect();
+        let current = ui
+            .models
+            .direct_models
+            .iter()
+            .position(|model| *model == ui.modes.editor.model.text.trim())
+            .map(|index| index.to_string());
+        let picker = rune_kit::Combobox::new(
+            "llm-model-picker",
+            &ui.models.direct_picker,
+            &options,
+            |ui: &mut Ui| &mut ui.models.direct_picker,
+        )
+        .trigger(chevron)
+        .label(tr("Model"))
+        .current(current.as_deref())
+        .width(320.0)
+        .max_height(360.0)
+        .search_placeholder(tr("Search models"))
+        .empty_message(tr("No models match"))
+        .placement(rune_kit::Placement::BottomEnd)
+        .on_choose(|ui: &mut Ui, id: &str, _: &mut rune::Tx| {
+            if let Some(model) = id
+                .parse::<usize>()
+                .ok()
+                .and_then(|index| ui.models.direct_models.get(index))
+            {
+                ui.modes.editor.model = rune::TextEdit::new(model.clone());
+                ui.modes.editor.llm_touched = true;
+                ui.models.direct_picker.close();
+                ui.flush_drafts();
+            }
+        })
+        .build(p.k, layer);
+        let model_control = row()
+            .key("llm-model-control")
+            .gap(6.0)
+            .center_y()
+            .child(model_field)
+            .child(picker);
+        rows.push(setting_row(
+            p,
+            "llm-model",
+            tr("Model"),
+            None,
+            model_control,
+        ));
         rows.push(
             row()
                 .key("llm-actions")

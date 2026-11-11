@@ -56,6 +56,8 @@ pub(super) struct Models {
     pub(super) direct_error: Option<String>,
     /// A connection test's answer, shown beside the direct-provider rows.
     pub(super) direct_test: Option<String>,
+    /// The direct-provider model picker: search and keyboard highlight.
+    pub(super) direct_picker: ComboboxState,
 }
 
 impl Default for Models {
@@ -69,6 +71,7 @@ impl Default for Models {
             direct_models: Vec::new(),
             direct_error: None,
             direct_test: None,
+            direct_picker: ComboboxState::default(),
         }
     }
 }
@@ -271,6 +274,7 @@ fn choose_variant(ui: &mut Ui, target: Target, variant: Option<String>) {
 /// Closes the model popover, as leaving the pane or window does.
 pub(super) fn close(ui: &mut Ui) {
     ui.models.picker.close();
+    ui.models.direct_picker.close();
 }
 
 fn close_menu(ui: &mut Ui) {
