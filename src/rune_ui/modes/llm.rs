@@ -13,7 +13,9 @@ use crate::desktop::i18n::tr;
 use crate::desktop::opencode_catalog::OpenCodeFeature;
 
 use super::super::Ui;
-use super::super::controls::{ButtonKind, METRICS, Paint, button, note, section, setting_row};
+use super::super::controls::{
+    ButtonKind, DESCRIPTION, METRICS, Paint, button, note, section, setting_row,
+};
 use super::super::models::{self, Target};
 use super::{FIELD_WIDTH, Selection, mode, update_mode};
 
@@ -224,7 +226,7 @@ pub(super) fn processing(
                             crate::dictation::llm_client::generate(
                                 "Reply with exactly: OK",
                                 &settings,
-                                Duration::from_secs(10),
+                                Some(Duration::from_secs(10)),
                                 &cancelled,
                             )
                             .map(|_| ())
@@ -247,15 +249,27 @@ pub(super) fn processing(
         rows.push(setting_row(
             p,
             "deadline",
-            tr("Deadline"),
+            tr("Timeout"),
             None,
-            TextInput::new(&ui.modes.editor.deadline)
-                .label(tr("Deadline"))
-                .placeholder("30")
-                .width(Some(96.0))
-                .on_edit(|ui: &mut Ui| &mut ui.modes.editor.deadline)
-                .build(p.k)
-                .key("deadline-field"),
+            row()
+                .key("deadline-control")
+                .gap(6.0)
+                .center_y()
+                .child(
+                    TextInput::new(&ui.modes.editor.deadline)
+                        .label(tr("Timeout"))
+                        .placeholder(tr("Leave empty for no timeout"))
+                        .width(Some(96.0))
+                        .on_edit(|ui: &mut Ui| &mut ui.modes.editor.deadline)
+                        .build(p.k)
+                        .key("deadline-field"),
+                )
+                .child(
+                    text(tr("seconds"))
+                        .key("unit")
+                        .font(DESCRIPTION)
+                        .color(p.muted()),
+                ),
         ));
         rows.push(
             col()

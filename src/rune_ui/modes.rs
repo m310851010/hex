@@ -100,7 +100,12 @@ impl Editor {
         Self {
             name: TextEdit::new(mode.name.clone()),
             prompt: TextEdit::new(mode.post_processing.prompt.clone()),
-            deadline: TextEdit::new(mode.post_processing.deadline_seconds.to_string()),
+            deadline: TextEdit::new(
+                mode.post_processing
+                    .deadline_seconds
+                    .map(|seconds| seconds.to_string())
+                    .unwrap_or_default(),
+            ),
             replacements: mode
                 .replacements
                 .iter()
@@ -280,13 +285,15 @@ impl ModesPane {
         }
         mode.vocabulary = vocabulary;
         mode.post_processing.prompt = editor.prompt.text.trim().to_string();
-        mode.post_processing.deadline_seconds = editor
-            .deadline
-            .text
-            .trim()
-            .parse::<u64>()
-            .unwrap_or(mode.post_processing.deadline_seconds)
-            .max(1);
+        // An empty field means no deadline: the rewrite is allowed to take
+        // as long as the service needs. A number keeps the timeout, and a
+        // bad one leaves the saved value alone.
+        let deadline = editor.deadline.text.trim();
+        if deadline.is_empty() {
+            mode.post_processing.deadline_seconds = None;
+        } else if let Ok(seconds) = deadline.parse::<u64>() {
+            mode.post_processing.deadline_seconds = Some(seconds.max(1));
+        }
         if editor.llm_touched {
             settings.llm.base_url = editor.base_url.text.trim().to_string();
             settings.llm.api_key = editor.api_key.text.clone();
@@ -1408,17 +1415,25 @@ mod tests {
         let mode = &settings.dictation_processing.default_mode;
         assert_eq!(mode.browser_hosts, ["github.com", "gitlab.com"]);
         assert_eq!(mode.post_processing.prompt, "Drop fillers.");
-        assert_eq!(mode.post_processing.deadline_seconds, 12);
+        assert_eq!(mode.post_processing.deadline_seconds, Some(12));
         assert_eq!(mode.vocabulary.len(), 1);
         assert_eq!(mode.vocabulary[0].term, "Rune");
         assert_eq!(mode.vocabulary[0].sounds_like, ["roon", "rune app"]);
     }
 
     #[test]
-    fn a_bad_deadline_keeps_the_saved_one() {
+    fn an_empty_deadline_means_no_timeout() {
         let settings = AppSettings::default();
+        assert_eq!(
+            settings
+                .dictation_processing
+                .default_mode
+                .post_processing
+                .deadline_seconds,
+            None
+        );
         let mut pane = ModesPane::new(&settings);
-        pane.editor.deadline = TextEdit::new("not a number");
+        pane.editor.deadline = TextEdit::new("45");
         let mut settings = settings;
         pane.project(&mut settings);
         assert_eq!(
@@ -1427,7 +1442,18 @@ mod tests {
                 .default_mode
                 .post_processing
                 .deadline_seconds,
-            30
+            Some(45)
+        );
+        // A bad value leaves the saved one alone.
+        pane.editor.deadline = TextEdit::new("not a number");
+        pane.project(&mut settings);
+        assert_eq!(
+            settings
+                .dictation_processing
+                .default_mode
+                .post_processing
+                .deadline_seconds,
+            Some(45)
         );
         pane.editor.deadline = TextEdit::new("0");
         pane.project(&mut settings);
@@ -1437,8 +1463,19 @@ mod tests {
                 .default_mode
                 .post_processing
                 .deadline_seconds,
-            1,
+            Some(1),
             "zero clamps to one second"
+        );
+        pane.editor.deadline = TextEdit::new("");
+        pane.project(&mut settings);
+        assert_eq!(
+            settings
+                .dictation_processing
+                .default_mode
+                .post_processing
+                .deadline_seconds,
+            None,
+            "an empty field removes the deadline"
         );
     }
 }

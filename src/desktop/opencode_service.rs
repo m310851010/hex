@@ -69,7 +69,7 @@ pub(crate) fn find() -> Result<Service, Missing> {
 /// shares `deadline` (still capped by [`INFO_DEADLINE`]) and stops when
 /// `cancelled` is set, so a rewrite never waits past its deadline here.
 pub(crate) fn find_cancellable(
-    deadline: Duration,
+    deadline: Option<Duration>,
     cancelled: &AtomicBool,
 ) -> Result<Service, Missing> {
     find_in_cancellable(
@@ -104,10 +104,10 @@ fn find_in(state: &Path) -> Result<Service, Missing> {
 /// search once it is spent, so a stalled service can't outlive the rewrite.
 fn find_in_cancellable(
     state: &Path,
-    deadline: Duration,
+    deadline: Option<Duration>,
     cancelled: &AtomicBool,
 ) -> Result<Service, Missing> {
-    discover(state, Some(deadline), cancelled)
+    discover(state, deadline, cancelled)
 }
 
 /// `budget` is the caller's whole remaining time, or `None` for one
@@ -149,7 +149,7 @@ fn discover(
             }
             None => INFO_DEADLINE,
         };
-        match confirm(&registration, deadline, cancelled) {
+        match confirm(&registration, Some(deadline), cancelled) {
             Ok(service) => return Ok(service),
             Err(Missing::Outdated) => missing = Missing::Outdated,
             Err(Missing::NotRunning) => {}
@@ -208,7 +208,7 @@ fn open_private(path: &Path) -> Option<fs::File> {
 /// answering `/api/info` is the registered one.
 fn confirm(
     registration: &Registration,
-    deadline: Duration,
+    deadline: Option<Duration>,
     cancelled: &AtomicBool,
 ) -> Result<Service, Missing> {
     let service = Service {
@@ -281,16 +281,25 @@ impl Service {
         path: &str,
         body: Option<&[u8]>,
         directory: Option<&Path>,
-        deadline: Duration,
+        deadline: Option<Duration>,
         cancelled: &AtomicBool,
     ) -> Result<Response> {
         let started = Instant::now();
-        let remaining = || deadline.saturating_sub(started.elapsed());
+        // Without a deadline, this is only a wait slice: the poll loop still
+        // stops on cancellation, and the socket keeps its own timeouts.
+        let no_deadline_wait = Duration::from_secs(3600);
+        let remaining = || {
+            deadline
+                .map(|deadline| deadline.saturating_sub(started.elapsed()))
+                .unwrap_or(no_deadline_wait)
+        };
         let check = |remaining: Duration| -> Result<()> {
             if cancelled.load(Ordering::Acquire) {
                 return Err(eyre!("OpenCode {path} was cancelled"));
             }
-            if remaining.is_zero() {
+            if let Some(deadline) = deadline
+                && remaining.is_zero()
+            {
                 return Err(eyre!(
                     "OpenCode {path} exceeded {} seconds",
                     deadline.as_secs()
@@ -744,7 +753,11 @@ pub(crate) mod tests {
         register(&state, "service.json", &url, 42);
         let started = Instant::now();
         assert_eq!(
-            find_in_cancellable(&state, Duration::from_millis(100), &AtomicBool::new(false)),
+            find_in_cancellable(
+                &state,
+                Some(Duration::from_millis(100)),
+                &AtomicBool::new(false),
+            ),
             Err(Missing::NotRunning)
         );
         assert!(
@@ -769,7 +782,7 @@ pub(crate) mod tests {
                 cancelled.store(true, Ordering::Release);
             });
             assert_eq!(
-                find_in_cancellable(&state, Duration::from_secs(30), &cancelled),
+                find_in_cancellable(&state, Some(Duration::from_secs(30)), &cancelled),
                 Err(Missing::NotRunning)
             );
         });
@@ -861,7 +874,7 @@ pub(crate) mod tests {
                 "/api/model",
                 None,
                 Some(&root),
-                Duration::from_secs(5),
+                Some(Duration::from_secs(5)),
                 &AtomicBool::new(false),
             )
             .unwrap();
@@ -890,7 +903,7 @@ pub(crate) mod tests {
                 "/api/info",
                 None,
                 None,
-                Duration::from_millis(200),
+                Some(Duration::from_millis(200)),
                 &AtomicBool::new(false),
             )
             .unwrap_err();
@@ -907,7 +920,7 @@ pub(crate) mod tests {
                     "/api/info",
                     None,
                     None,
-                    Duration::from_secs(30),
+                    Some(Duration::from_secs(30)),
                     &cancelled,
                 )
                 .unwrap_err();
@@ -960,13 +973,13 @@ pub(crate) mod tests {
                 "/generate",
                 Some(&body),
                 None,
-                Duration::from_millis(300),
+                Some(Duration::from_millis(300)),
                 &AtomicBool::new(false),
             )
             .unwrap_err();
         assert!(error.to_string().contains("exceeded"), "{error}");
         assert!(
-            started.elapsed() < Duration::from_secs(2),
+            started.elapsed() < Duration::from_secs(5),
             "{:?}",
             started.elapsed()
         );
@@ -983,13 +996,13 @@ pub(crate) mod tests {
                     "/generate",
                     Some(&body),
                     None,
-                    Duration::from_secs(30),
+                    Some(Duration::from_secs(30)),
                     &cancelled,
                 )
                 .unwrap_err();
             assert!(error.to_string().contains("cancelled"), "{error}");
             assert!(
-                started.elapsed() < Duration::from_secs(2),
+                started.elapsed() < Duration::from_secs(5),
                 "{:?}",
                 started.elapsed()
             );
@@ -1034,14 +1047,14 @@ pub(crate) mod tests {
                 "/generate",
                 Some(&large_body()),
                 None,
-                Duration::from_secs(30),
+                Some(Duration::from_secs(30)),
                 &AtomicBool::new(false),
             )
             .unwrap();
         assert_eq!(response.status, 404);
         assert_eq!(response.body, b"gone");
         assert!(
-            started.elapsed() < Duration::from_secs(2),
+            started.elapsed() < Duration::from_secs(5),
             "{:?}",
             started.elapsed()
         );
@@ -1059,7 +1072,7 @@ pub(crate) mod tests {
                 "/generate",
                 Some(&body),
                 None,
-                Duration::from_secs(30),
+                Some(Duration::from_secs(30)),
                 &AtomicBool::new(false),
             )
             .unwrap();

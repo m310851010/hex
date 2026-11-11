@@ -55,4 +55,7 @@ pub(super) const TRANSLATIONS: &[(&str, [&str; 6])] = &[
     ("Logs", ["Logi", "日志", "ログ", "Protokolle", "Registros", "Журнали"]),
     ("Captures", ["Nagrania", "录屏", "キャプチャ", "Aufnahmen", "Capturas", "Записи"]),
     ("Updates", ["Aktualizacje", "更新", "更新", "Updates", "Actualizaciones", "Оновлення"]),
+    ("Timeout", ["Limit czasu", "超时时间", "タイムアウト", "Zeitlimit", "Tiempo de espera", "Тайм-аут"]),
+    ("Leave empty for no timeout", ["Zostaw puste, aby nie ustawiać limitu", "留空表示不超时", "空欄でタイムアウトなし", "Leer lassen für kein Zeitlimit", "Déjalo vacío para no limitar el tiempo", "Залиште порожнім без тайм-ауту"]),
+    ("seconds", ["sekundy", "秒", "秒", "Sekunden", "segundos", "секунди"]),
 ];

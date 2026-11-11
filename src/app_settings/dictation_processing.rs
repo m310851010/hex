@@ -51,7 +51,11 @@ pub struct DictationPostProcessing {
     /// Optional `provider/model` key from the OpenCode catalog.
     pub model: Option<String>,
     pub variant: Option<String>,
-    pub deadline_seconds: u64,
+    /// `None` means no deadline: the rewrite waits as long as the service
+    /// needs. A saved number keeps its value, so older installs that saved
+    /// 30 seconds still time out after 30.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deadline_seconds: Option<u64>,
 }
 
 impl Default for DictationPostProcessing {
@@ -61,7 +65,7 @@ impl Default for DictationPostProcessing {
             prompt: "Rewrite the transcript into clear, natural text while preserving the speaker's intended meaning.".into(),
             model: None,
             variant: None,
-            deadline_seconds: 30,
+            deadline_seconds: None,
         }
     }
 }

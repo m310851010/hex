@@ -1230,6 +1230,9 @@ const TRANSLATIONS: &[(&str, &str)] = &[
     ("Logs", "Registros"),
     ("Captures", "Capturas"),
     ("Updates", "Atualizações"),
+    ("Timeout", "Tempo limite"),
+    ("Leave empty for no timeout", "Deixe vazio para sem limite"),
+    ("seconds", "segundos"),
 ];
 
 #[cfg(test)]

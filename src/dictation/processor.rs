@@ -24,7 +24,9 @@ pub struct Profile {
     ai_enabled: bool,
     prompt: String,
     model: Option<Model>,
-    deadline: Duration,
+    /// `None` means no deadline; a stalled service is left to the OS's
+    /// own connect/read timeouts and the caller's cancellation.
+    deadline: Option<Duration>,
     replacements: ReplacementSet,
     transformations: Vec<String>,
     /// The mode's own vocabulary, heard and spelled ahead of the shared list.
@@ -38,7 +40,7 @@ impl Profile {
             ai_enabled: false,
             prompt: prompt.into(),
             model: None,
-            deadline: Duration::from_secs(30),
+            deadline: None,
             replacements: ReplacementSet::default(),
             transformations: Vec::new(),
             vocabulary: Vec::new(),
@@ -88,7 +90,7 @@ impl Profile {
         self
     }
 
-    pub fn deadline(mut self, deadline: Duration) -> Self {
+    pub fn deadline(mut self, deadline: Option<Duration>) -> Self {
         self.deadline = deadline;
         self
     }
@@ -158,7 +160,11 @@ impl Profile {
                 profile = profile.variant(variant);
             }
         }
-        profile.deadline(Duration::from_secs(settings.deadline_seconds.max(1)))
+        profile.deadline(
+            settings
+                .deadline_seconds
+                .map(|seconds| Duration::from_secs(seconds.max(1))),
+        )
     }
 }
 
@@ -491,7 +497,7 @@ pub(crate) fn generate_text(
     deadline: Duration,
     cancelled: &AtomicBool,
 ) -> Result<Generated> {
-    generate_cancellable(prompt, None, deadline, cancelled)
+    generate_cancellable(prompt, None, Some(deadline), cancelled)
 }
 
 /// One generation from exactly `model`, never another provider's: a failure
@@ -502,7 +508,7 @@ pub(crate) fn generate_text_with(
     deadline: Duration,
     cancelled: &AtomicBool,
 ) -> Result<Generated> {
-    generate_cancellable(prompt, Some(model), deadline, cancelled)
+    generate_cancellable(prompt, Some(model), Some(deadline), cancelled)
 }
 
 /// Runs one generation and reports it as a processing observation. The text is
@@ -511,7 +517,7 @@ pub(crate) fn generate_text_with(
 fn generate_observed(
     prompt: &str,
     model: Option<&Model>,
-    deadline: Duration,
+    deadline: Option<Duration>,
     cancelled: &AtomicBool,
     profile_name: &str,
     started: Instant,
@@ -692,7 +698,7 @@ fn forget_ranked_candidates() {
 
 fn ranked_candidates_for(
     service: &Service,
-    deadline: Duration,
+    deadline: Option<Duration>,
     cancelled: &AtomicBool,
 ) -> Vec<Model> {
     if let Ok(guard) = CACHED_RANKED_CANDIDATES.lock()
@@ -704,7 +710,7 @@ fn ranked_candidates_for(
     let Ok(models) = opencode_api_within::<ModelsResponse>(
         service,
         "/api/model",
-        deadline.min(CATALOG_DEADLINE),
+        deadline.map(|deadline| deadline.min(CATALOG_DEADLINE)),
         cancelled,
     ) else {
         // A cancelled or timed-out lookup caches nothing, like any other
@@ -800,13 +806,18 @@ fn decode_api_response<T: for<'de> Deserialize<'de>>(path: &str, body: &[u8]) ->
 }
 
 fn opencode_api<T: for<'de> Deserialize<'de>>(service: &Service, path: &str) -> Result<T> {
-    opencode_api_within(service, path, CATALOG_DEADLINE, &AtomicBool::new(false))
+    opencode_api_within(
+        service,
+        path,
+        Some(CATALOG_DEADLINE),
+        &AtomicBool::new(false),
+    )
 }
 
 fn opencode_api_within<T: for<'de> Deserialize<'de>>(
     service: &Service,
     path: &str,
-    deadline: Duration,
+    deadline: Option<Duration>,
     cancelled: &AtomicBool,
 ) -> Result<T> {
     let workspace = crate::app_paths::opencode_workspace()?;
@@ -924,14 +935,14 @@ struct ResponseData {
 
 #[cfg(test)]
 fn generate(prompt: &str, model: Option<&Model>, deadline: Duration) -> Result<String> {
-    generate_cancellable(prompt, model, deadline, &AtomicBool::new(false))
+    generate_cancellable(prompt, model, Some(deadline), &AtomicBool::new(false))
         .map(|generated| generated.text)
 }
 
 fn generate_cancellable(
     prompt: &str,
     model: Option<&Model>,
-    deadline: Duration,
+    deadline: Option<Duration>,
     cancelled: &AtomicBool,
 ) -> Result<Generated> {
     let started = Instant::now();
@@ -975,7 +986,7 @@ fn generate_cancellable(
         || {
             ranked_candidates_for(
                 &service,
-                deadline.saturating_sub(started.elapsed()),
+                remaining_generation_deadline(started, deadline).unwrap_or(None),
                 cancelled,
             )
         },
@@ -994,9 +1005,9 @@ fn generate_with_candidates(
     candidates: impl FnOnce() -> Vec<Model>,
     forget_candidates: impl FnMut(),
     started: Instant,
-    deadline: Duration,
+    deadline: Option<Duration>,
     cancelled: &AtomicBool,
-    post: impl FnMut(&str, Duration, &AtomicBool) -> Result<Response>,
+    post: impl FnMut(&str, Option<Duration>, &AtomicBool) -> Result<Response>,
 ) -> Result<Generated> {
     if model.is_none() {
         let candidates = candidates();
@@ -1019,7 +1030,13 @@ fn generate_with_candidates(
     })
 }
 
-fn remaining_generation_deadline(started: Instant, deadline: Duration) -> Result<Duration> {
+fn remaining_generation_deadline(
+    started: Instant,
+    deadline: Option<Duration>,
+) -> Result<Option<Duration>> {
+    let Some(deadline) = deadline else {
+        return Ok(None);
+    };
     let remaining = deadline.saturating_sub(started.elapsed());
     if remaining.is_zero() {
         Err(eyre!(
@@ -1027,7 +1044,7 @@ fn remaining_generation_deadline(started: Instant, deadline: Duration) -> Result
             deadline.as_secs()
         ))
     } else {
-        Ok(remaining)
+        Ok(Some(remaining))
     }
 }
 
@@ -1039,9 +1056,9 @@ fn generate_with_ranked_candidates(
     candidates: &[Model],
     mut forget_candidates: impl FnMut(),
     started: Instant,
-    deadline: Duration,
+    deadline: Option<Duration>,
     cancelled: &AtomicBool,
-    mut post: impl FnMut(&str, Duration, &AtomicBool) -> Result<Response>,
+    mut post: impl FnMut(&str, Option<Duration>, &AtomicBool) -> Result<Response>,
 ) -> Result<Generated> {
     let mut last_error = None;
     for candidate in candidates {
@@ -1092,9 +1109,9 @@ fn generate_single_model(
     prompt: &str,
     model: Option<&Model>,
     started: Instant,
-    deadline: Duration,
+    deadline: Option<Duration>,
     cancelled: &AtomicBool,
-    mut post: impl FnMut(&str, Duration, &AtomicBool) -> Result<Response>,
+    mut post: impl FnMut(&str, Option<Duration>, &AtomicBool) -> Result<Response>,
 ) -> Result<String> {
     let request = Request { prompt, model };
     let data = serde_json::to_string(&request)?;
@@ -1120,7 +1137,7 @@ fn generate_single_model(
 fn post_generation(
     service: &Service,
     data: &str,
-    deadline: Duration,
+    deadline: Option<Duration>,
     cancelled: &AtomicBool,
 ) -> Result<Response> {
     let started = Instant::now();
@@ -1131,7 +1148,7 @@ fn post_generation(
             path,
             Some(data.as_bytes()),
             None,
-            deadline.saturating_sub(started.elapsed()),
+            deadline.map(|deadline| deadline.saturating_sub(started.elapsed())),
             cancelled,
         )?;
         let missing = route_missing(&attempt);
@@ -1166,7 +1183,7 @@ fn retryable_generation_error(message: &str) -> bool {
 
 fn wait_for_generation_retry(
     started: Instant,
-    deadline: Duration,
+    deadline: Option<Duration>,
     cancelled: &AtomicBool,
 ) -> Result<()> {
     let wait_started = Instant::now();
@@ -1174,11 +1191,8 @@ fn wait_for_generation_retry(
         if cancelled.load(Ordering::Acquire) {
             return Err(eyre!("OpenCode generation was cancelled"));
         }
-        if started.elapsed() >= deadline {
-            return Err(eyre!(
-                "OpenCode generation exceeded {} seconds",
-                deadline.as_secs()
-            ));
+        if deadline.is_some_and(|deadline| started.elapsed() >= deadline) {
+            return Err(eyre!("OpenCode generation exceeded its deadline"));
         }
         thread::sleep(Duration::from_millis(20));
     }
@@ -1539,7 +1553,7 @@ mod tests {
             || -> Vec<Model> { panic!("a chosen model never reads the ranked candidates") },
             || panic!("a chosen model never forgets the ranked candidates"),
             Instant::now(),
-            Duration::from_secs(5),
+            Some(Duration::from_secs(5)),
             &AtomicBool::new(false),
             |data, _, _| {
                 posted.push(data.to_owned());
@@ -1566,7 +1580,7 @@ mod tests {
         let cancelled = AtomicBool::new(true);
         let started = Instant::now();
 
-        let error = wait_for_generation_retry(started, Duration::from_secs(30), &cancelled)
+        let error = wait_for_generation_retry(started, Some(Duration::from_secs(30)), &cancelled)
             .expect_err("cancelled retry unexpectedly waited");
 
         assert!(error.to_string().contains("was cancelled"));
@@ -1581,7 +1595,7 @@ mod tests {
         let error = generate_cancellable(
             "Rewrite this.",
             None,
-            Duration::ZERO,
+            Some(Duration::ZERO),
             &AtomicBool::new(false),
         )
         .unwrap_err();
@@ -1589,7 +1603,7 @@ mod tests {
         let error = generate_cancellable(
             "Rewrite this.",
             None,
-            Duration::from_secs(1),
+            Some(Duration::from_secs(1)),
             &AtomicBool::new(true),
         )
         .unwrap_err();
@@ -1608,8 +1622,12 @@ mod tests {
         let service = crate::desktop::opencode_service::tests::fixture(&url);
         let started = Instant::now();
         assert!(
-            ranked_candidates_for(&service, Duration::from_secs(30), &AtomicBool::new(true))
-                .is_empty()
+            ranked_candidates_for(
+                &service,
+                Some(Duration::from_secs(30)),
+                &AtomicBool::new(true),
+            )
+            .is_empty()
         );
         assert!(
             started.elapsed() < Duration::from_secs(1),
@@ -1690,7 +1708,7 @@ mod tests {
             let result = post_generation(
                 &service,
                 "{}",
-                Duration::from_secs(5),
+                Some(Duration::from_secs(5)),
                 &AtomicBool::new(false),
             );
             match (result, expected) {
@@ -1830,7 +1848,7 @@ mod tests {
             &candidates,
             || forgotten += 1,
             Instant::now(),
-            Duration::from_secs(5),
+            Some(Duration::from_secs(5)),
             &AtomicBool::new(false),
             |data, remaining, cancelled| post_generation(&service, data, remaining, cancelled),
         )
@@ -1876,7 +1894,7 @@ mod tests {
             &candidates,
             || forgotten += 1,
             Instant::now(),
-            Duration::from_secs(5),
+            Some(Duration::from_secs(5)),
             &AtomicBool::new(false),
             |data, _, _| {
                 posted.push(serde_json::from_str::<serde_json::Value>(data).unwrap());

@@ -24,7 +24,7 @@ const SYSTEM_PROMPT: &str = "You rewrite dictated speech. Return only the replac
 pub fn generate(
     prompt: &str,
     settings: &LlmSettings,
-    deadline: Duration,
+    deadline: Option<Duration>,
     cancelled: &AtomicBool,
 ) -> Result<String> {
     if cancelled.load(Ordering::Acquire) {
@@ -93,7 +93,7 @@ pub fn list_models(settings: &LlmSettings, deadline: Duration) -> Result<Vec<Str
         request,
         None,
         &url,
-        deadline,
+        Some(deadline),
         started,
         &AtomicBool::new(false),
     )?;
@@ -114,16 +114,17 @@ fn send(
     request: ureq::http::request::Builder,
     body: Option<Vec<u8>>,
     url: &str,
-    deadline: Duration,
+    deadline: Option<Duration>,
     started: Instant,
     cancelled: &AtomicBool,
 ) -> Result<Vec<u8>> {
     let left = remaining(deadline, started)?;
-    let configure = |config: crate::net::Config| {
-        config
-            .http_status_as_error(false)
-            .max_redirects(5)
-            .timeout_global(Some(left))
+    let configure = move |config: crate::net::Config| {
+        let config = config.http_status_as_error(false).max_redirects(5);
+        match left {
+            Some(left) => config.timeout_global(Some(left)),
+            None => config,
+        }
     };
     let agent = crate::net::agent(url, configure);
     let bytes = body.unwrap_or_default();
@@ -153,12 +154,15 @@ fn send(
     Ok(text)
 }
 
-fn remaining(deadline: Duration, started: Instant) -> Result<Duration> {
+fn remaining(deadline: Option<Duration>, started: Instant) -> Result<Option<Duration>> {
+    let Some(deadline) = deadline else {
+        return Ok(None);
+    };
     let left = deadline.saturating_sub(started.elapsed());
     if left.is_zero() {
         bail!("LLM generation exceeded {} seconds", deadline.as_secs());
     }
-    Ok(left)
+    Ok(Some(left))
 }
 
 #[derive(Deserialize)]
@@ -298,7 +302,7 @@ mod tests {
     fn a_cancelled_generation_does_not_send() {
         let settings = LlmSettings::for_provider(LlmProvider::OpenAi, "sk-test");
         let cancelled = AtomicBool::new(true);
-        assert!(generate("x", &settings, Duration::from_secs(5), &cancelled).is_err());
+        assert!(generate("x", &settings, Some(Duration::from_secs(5)), &cancelled).is_err());
     }
 
     #[test]

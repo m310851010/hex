@@ -1233,6 +1233,9 @@ const TRANSLATIONS: &[(&str, &str)] = &[
     ("Logs", "Journaux"),
     ("Captures", "Captures"),
     ("Updates", "Mises à jour"),
+    ("Timeout", "Délai d'attente"),
+    ("Leave empty for no timeout", "Laisser vide pour aucun délai"),
+    ("seconds", "secondes"),
 ];
 
 #[cfg(test)]

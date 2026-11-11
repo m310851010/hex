@@ -773,7 +773,8 @@ fn agent_prompt(fix: Option<(&str, &str)>) -> String {
          \n\
          `post_processing` rewrites the text with the service `llm.provider` names \
          (`open_code`, `open_ai`, or `anthropic`): \
-         {{\"enabled\": true, \"prompt\": \"<how to rewrite>\", \"deadline_seconds\": 30}}. \
+         {{\"enabled\": true, \"prompt\": \"<how to rewrite>\"}}. An optional \
+         `deadline_seconds` sets a timeout in seconds; leave it out for no timeout. \
          With `open_code`, an optional `model` is a `provider/model` key from \
          the OpenCode catalog; leave it out and Hex picks a fast one you have \
          connected. With a direct provider, `model` here is ignored: the model \
