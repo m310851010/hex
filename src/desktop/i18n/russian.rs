@@ -1221,6 +1221,8 @@ const TRANSLATIONS: &[(&str, &str)] = &[
     ("OpenCode service, or a direct endpoint you configure", "Служба OpenCode или самостоятельно настроенная конечная точка"),
     ("Describe how the model should rewrite your dictation…", "Опишите, как модель должна переписывать диктовку…"),
     ("Search models", "Поиск моделей"),
+    ("Fetching…", "Получение…"),
+    ("Testing…", "Проверка…"),
 ];
 
 #[cfg(test)]

@@ -41,6 +41,32 @@ pub(super) enum Target {
 /// chosen.
 pub(super) const SUMMARY_AUTOMATIC: &str = "Hex picks a fast model";
 
+/// The answer of a direct-provider request run off the UI thread.
+#[derive(Debug)]
+pub(super) enum DirectReply {
+    Models(Result<Vec<String>, String>),
+    Test(Result<(), String>),
+}
+
+/// Starts a direct-provider request on a worker, waking the window when it
+/// answers. Neither the model list nor the connection test may block the UI.
+pub(super) fn start_direct_request(
+    work: impl FnOnce() -> DirectReply + Send + 'static,
+    waker: Option<rune::Waker>,
+) -> std::sync::mpsc::Receiver<DirectReply> {
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+    std::thread::Builder::new()
+        .name("hex-direct-llm".into())
+        .spawn(move || {
+            let _ = sender.send(work());
+            if let Some(waker) = waker {
+                waker();
+            }
+        })
+        .expect("a direct LLM worker thread starts");
+    receiver
+}
+
 pub(super) struct Models {
     state: ModelCatalogState,
     receiver: Option<Receiver<ModelCatalogState>>,
@@ -58,6 +84,18 @@ pub(super) struct Models {
     pub(super) direct_test: Option<String>,
     /// The direct-provider model picker: search and keyboard highlight.
     pub(super) direct_picker: ComboboxState,
+    /// An in-flight direct-provider request; its answer arrives on this
+    /// channel and is applied in `poll`, never while a frame is built.
+    pub(super) direct_receiver: Option<Receiver<DirectReply>>,
+    /// Which button is waiting, for its "…" label.
+    pub(super) direct_busy: Option<DirectAction>,
+}
+
+/// Which direct-provider request is in flight.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum DirectAction {
+    Fetch,
+    Test,
 }
 
 impl Default for Models {
@@ -72,6 +110,8 @@ impl Default for Models {
             direct_error: None,
             direct_test: None,
             direct_picker: ComboboxState::default(),
+            direct_receiver: None,
+            direct_busy: None,
         }
     }
 }
@@ -94,6 +134,28 @@ impl Models {
     /// shows), loads it the first time and looks for a stopped OpenCode
     /// now and then; otherwise touches nothing.
     pub(super) fn poll(&mut self, wanted: bool) -> bool {
+        let mut changed = false;
+        // A direct-provider answer is shown wherever the window is, not only
+        // while the Modes pane is open; the request itself never blocked a
+        // frame.
+        if let Some(receiver) = &self.direct_receiver
+            && let Ok(reply) = receiver.try_recv()
+        {
+            self.direct_receiver = None;
+            self.direct_busy = None;
+            match reply {
+                DirectReply::Models(Ok(models)) => {
+                    self.direct_models = models;
+                    self.direct_error = None;
+                }
+                DirectReply::Models(Err(error)) => self.direct_error = Some(error),
+                DirectReply::Test(Ok(())) => {
+                    self.direct_test = Some(tr("Connection works").to_string())
+                }
+                DirectReply::Test(Err(error)) => self.direct_test = Some(error),
+            }
+            changed = true;
+        }
         let opened = self.picker.open && !self.picker_was_open;
         self.picker_was_open = self.picker.open;
         // Opening the picker reads the catalog again, keeping the models it
@@ -101,22 +163,21 @@ impl Models {
         if wanted && opened && self.receiver.is_none() {
             self.start_load();
         }
-        if let Some(receiver) = &self.receiver {
-            let Ok(state) = receiver.try_recv() else {
-                return false;
-            };
+        if let Some(receiver) = &self.receiver
+            && let Ok(state) = receiver.try_recv()
+        {
             self.state = state;
             self.receiver = None;
-            return true;
+            changed = true;
         }
         let due = match self.retry_at {
             None => true,
             Some(at) => matches!(self.state, ModelCatalogState::NotRunning) && Instant::now() >= at,
         };
-        if wanted && due {
+        if wanted && due && self.receiver.is_none() {
             self.start_load();
         }
-        false
+        changed
     }
 
     pub(super) fn reload(&mut self) {

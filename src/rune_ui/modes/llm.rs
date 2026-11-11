@@ -200,19 +200,45 @@ pub(super) fn processing(
                 .key("llm-actions")
                 .gap(8.0)
                 .px(METRICS.row_px)
-                .child(button(
+                .child(llm_action_button(
+                    ui,
                     p,
                     "llm-fetch-models",
                     tr("Fetch models"),
-                    ButtonKind::Secondary,
-                    |ui: &mut Ui, _| fetch_direct_models(ui),
+                    tr("Fetching…"),
+                    models::DirectAction::Fetch,
+                    || {
+                        let settings = crate::app_settings::AppSettings::saved_llm();
+                        models::DirectReply::Models(
+                            crate::dictation::llm_client::list_models(
+                                &settings,
+                                Duration::from_secs(10),
+                            )
+                            .map_err(|error| format!("{error:#}")),
+                        )
+                    },
                 ))
-                .child(button(
+                .child(llm_action_button(
+                    ui,
                     p,
                     "llm-test",
                     tr("Test connection"),
-                    ButtonKind::Secondary,
-                    |ui: &mut Ui, _| test_direct_llm(ui),
+                    tr("Testing…"),
+                    models::DirectAction::Test,
+                    || {
+                        let settings = crate::app_settings::AppSettings::saved_llm();
+                        let cancelled = AtomicBool::new(false);
+                        models::DirectReply::Test(
+                            crate::dictation::llm_client::generate(
+                                "Reply with exactly: OK",
+                                &settings,
+                                Duration::from_secs(10),
+                                &cancelled,
+                            )
+                            .map(|_| ())
+                            .map_err(|error| format!("{error:#}")),
+                        )
+                    },
                 )),
         );
         if let Some(error) = &ui.models.direct_error {
@@ -276,37 +302,39 @@ pub(super) fn processing(
     section(p, "processing", tr("Processing"), rows)
 }
 
-/// Asks the configured endpoint for its model ids. Bounded to two seconds,
-/// so a stalled endpoint never holds the window up.
-fn fetch_direct_models(ui: &mut Ui) {
-    ui.flush_drafts();
-    // The window may have been opened before `hex settings` changed the
-    // provider; read the saved config, not a stale in-memory copy.
-    let settings = crate::app_settings::AppSettings::saved_llm();
-    ui.models.direct_error = None;
-    match crate::dictation::llm_client::list_models(&settings, Duration::from_secs(2)) {
-        Ok(models) => {
-            ui.models.direct_models = models;
+/// One direct-provider action: while a request is in flight the button reads
+/// "…" and is disabled; its answer is applied by `models::poll`, never here.
+fn llm_action_button(
+    ui: &Ui,
+    p: Paint,
+    key: &'static str,
+    label: &str,
+    busy_label: &str,
+    action: models::DirectAction,
+    work: fn() -> models::DirectReply,
+) -> El {
+    let busy = ui.models.direct_busy;
+    let text = if busy == Some(action) {
+        busy_label
+    } else {
+        label
+    };
+    let waker = ui.modes.waker.clone();
+    button(
+        p,
+        key,
+        text,
+        ButtonKind::Secondary,
+        move |ui: &mut Ui, _| {
+            if ui.models.direct_receiver.is_some() {
+                return;
+            }
+            ui.flush_drafts();
+            ui.models.direct_busy = Some(action);
             ui.models.direct_error = None;
-        }
-        Err(error) => ui.models.direct_error = Some(format!("{error:#}")),
-    }
-}
-
-/// Sends a minimal prompt to confirm the endpoint and key work.
-fn test_direct_llm(ui: &mut Ui) {
-    ui.flush_drafts();
-    let settings = crate::app_settings::AppSettings::saved_llm();
-    let cancelled = AtomicBool::new(false);
-    ui.models.direct_test = Some(
-        match crate::dictation::llm_client::generate(
-            "Reply with exactly: OK",
-            &settings,
-            Duration::from_secs(5),
-            &cancelled,
-        ) {
-            Ok(_) => tr("Connection works").to_string(),
-            Err(error) => format!("{error:#}"),
+            ui.models.direct_test = None;
+            ui.models.direct_receiver = Some(models::start_direct_request(work, waker.clone()));
         },
-    );
+    )
+    .disabled(busy.is_some())
 }

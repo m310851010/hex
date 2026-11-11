@@ -1218,6 +1218,8 @@ const TRANSLATIONS: &[(&str, &str)] = &[
     ("OpenCode service, or a direct endpoint you configure", "Serviço OpenCode ou endpoint direto que você configura"),
     ("Describe how the model should rewrite your dictation…", "Descreva como o modelo deve reescrever seu ditado…"),
     ("Search models", "Buscar modelos"),
+    ("Fetching…", "Buscando…"),
+    ("Testing…", "Testando…"),
 ];
 
 #[cfg(test)]
