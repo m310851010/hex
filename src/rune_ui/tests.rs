@@ -2917,6 +2917,35 @@ fn a_direct_provider_needs_no_opencode_catalog() {
     assert!(rt.find("opencode-model").is_none(), "no OpenCode picker");
 }
 
+/// Output's "every dictation" list names the service that actually rewrites:
+/// a direct provider must not still say OpenCode. Window tests run on Linux.
+#[cfg(target_os = "linux")]
+#[test]
+fn output_names_the_configured_rewrite_provider() {
+    let mut rt = runtime("output", true, PANE_SIZE);
+    rt.state
+        .settings
+        .dictation_processing
+        .default_mode
+        .post_processing
+        .enabled = true;
+    rt.state.settings.llm = crate::app_settings::LlmSettings::for_provider(
+        crate::app_settings::LlmProvider::OpenAi,
+        "sk-test",
+    );
+    rt.state.settings.llm.model = "gpt-4o-mini".into();
+    rt.invalidate();
+    settle(&mut rt);
+    let shown = texts(&rt);
+    assert!(shown.iter().any(|text| text.contains("Rewrite with AI")));
+    assert!(
+        !shown
+            .iter()
+            .any(|text| text.contains("Rewrite with OpenCode"))
+    );
+    assert!(shown.iter().any(|text| text.contains("gpt-4o-mini")));
+}
+
 /// Fetching models replaces the comma-joined line with a searchable
 /// dropdown; choosing one saves the model id. Window tests run on Linux.
 #[cfg(target_os = "linux")]

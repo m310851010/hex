@@ -45,4 +45,5 @@ pub(super) const TRANSLATIONS: &[(&str, [&str; 6])] = &[
     ("Search models", ["Szukaj modeli", "搜索模型", "モデルを検索", "Modelle suchen", "Buscar modelos", "Пошук моделей"]),
     ("Fetching…", ["Pobieranie…", "拉取中…", "取得中…", "Abrufen…", "Obteniendo…", "Отримання…"]),
     ("Testing…", ["Testowanie…", "测试中…", "テスト中…", "Testen…", "Probando…", "Перевірка…"]),
+    ("Rewrite with AI", ["Przepisywanie przez AI", "AI 改写", "AI 書き換え", "KI-Umschreiben", "Reescritura con IA", "AI-переписування"]),
 ];

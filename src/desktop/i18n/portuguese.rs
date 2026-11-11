@@ -1220,6 +1220,7 @@ const TRANSLATIONS: &[(&str, &str)] = &[
     ("Search models", "Buscar modelos"),
     ("Fetching…", "Buscando…"),
     ("Testing…", "Testando…"),
+    ("Rewrite with AI", "Reescrita por IA"),
 ];
 
 #[cfg(test)]

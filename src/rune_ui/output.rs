@@ -80,8 +80,8 @@ pub(super) fn poll(ui: &mut Ui, clock: f64, tx: &mut Tx) -> bool {
     changed
 }
 
-/// What runs a step: Hex itself, a script from the person's config, or
-/// OpenCode rewriting.
+/// What runs a step: Hex itself, a script from the person's config, or the
+/// configured rewriting service (OpenCode or a direct LLM endpoint).
 #[derive(Clone, Copy, PartialEq)]
 enum Runner {
     BuiltIn,
@@ -96,7 +96,8 @@ struct Step {
 }
 
 /// A mode's steps in the order they run: the names it hears, its
-/// corrections, OpenCode rewriting when it is on, then its transformations.
+/// corrections, rewriting with the configured service when it is on, then
+/// its transformations.
 fn steps(ui: &Ui, mode: &DictationMode) -> Vec<Step> {
     let mut steps = Vec::new();
     if !mode.vocabulary.is_empty() {
@@ -134,9 +135,21 @@ fn steps(ui: &Ui, mode: &DictationMode) -> Vec<Step> {
         });
     }
     if mode.post_processing.enabled {
+        let llm = &ui.settings.llm;
+        let (title, detail) = if llm.provider.direct() {
+            (
+                tr("Rewrite with AI"),
+                (!llm.model.is_empty()).then(|| llm.model.clone()),
+            )
+        } else {
+            (
+                tr("Rewrite with OpenCode"),
+                mode.post_processing.model.clone(),
+            )
+        };
         steps.push(Step {
-            title: tr("Rewrite with OpenCode").into(),
-            detail: mode.post_processing.model.clone(),
+            title: title.into(),
+            detail,
             runner: Runner::Rewrite,
         });
     }
@@ -728,11 +741,13 @@ fn agent_prompt(fix: Option<(&str, &str)>) -> String {
          the mode's own `replacements`, `post_processing`, and `transformations` \
          instead of `default_mode`'s.\n\
          \n\
-         `post_processing` rewrites the text with a model through OpenCode: \
-         {{\"enabled\": true, \"prompt\": \"<how to rewrite>\", \"model\": \
-         \"<provider/model>\", \"deadline_seconds\": 30}}. Leave `model` out and Hex \
-         picks a fast one you have connected; set it only if I ask for a particular \
-         model (`opencode2 models` lists them). \
+         `post_processing` rewrites the text with the service `llm.provider` names \
+         (`open_code`, `open_ai`, or `anthropic`): \
+         {{\"enabled\": true, \"prompt\": \"<how to rewrite>\", \"deadline_seconds\": 30}}. \
+         With `open_code`, an optional `model` is a `provider/model` key from \
+         the OpenCode catalog; leave it out and Hex picks a fast one you have \
+         connected. With a direct provider, `model` here is ignored: the model \
+         comes from `llm.model`, with `llm.base_url` and `llm.api_key` in the same file. \
          If the rewrite fails or runs past the deadline, Hex pastes the text without it.\n\
          \n\
          Built-in transformations: \"lowercase\", \"no-trailing-punctuation\", \
