@@ -15,24 +15,24 @@ use rune::{
     Align, Drag, El, Phase, ScrollSpec, Side, TextEdit, Tx, Waker, col, edit_access, el, row,
     spacer, text,
 };
-use rune_kit::{ControlSize, IconButton, IconButtonVariant, Switch, TextArea, TextInput};
+use rune_kit::{ControlSize, IconButton, IconButtonVariant, TextInput};
 
+use self::llm::processing;
 use super::controls::{
     ButtonKind, DESCRIPTION, Highlight, METRICS, Paint, button, card, note, page, section,
     section_with, setting_row,
 };
 use super::lists::{LIST_COLUMN_PL, list_row, remove_button, source_list};
-use super::models::{self, Target};
 use super::{Menu, Ui};
-use crate::app_settings::{AppSettings, DictationMode};
+use crate::app_settings::{AppSettings, DictationMode, LlmSettings};
 use crate::application_catalog::InstalledApplication;
 use crate::desktop::file_dialog::{Choice, Dialog, Filter, Pending, Target as DialogTarget};
 use crate::desktop::i18n::{tr, tr_fill, tr_named};
-use crate::desktop::opencode_catalog::OpenCodeFeature;
 use crate::dictation::text_replacements::TextReplacement;
 use crate::personal_commands::{HostState, StatusSnapshot, StatusTransformation};
 use transformations::transformations;
 
+mod llm;
 mod transformations;
 
 const LIST_WIDTH: f32 = 240.0;
@@ -86,10 +86,17 @@ struct Editor {
     websites: Vec<TextEdit>,
     /// The mode's own vocabulary: a term and its "sounds like" spellings.
     vocabulary: Vec<(TextEdit, TextEdit)>,
+    /// The direct LLM endpoint's fields, shared by every mode. Only
+    /// projected once the person actually edits one, so an external
+    /// `hex settings` change is never overwritten by an untouched draft.
+    llm_touched: bool,
+    base_url: TextEdit,
+    api_key: TextEdit,
+    model: TextEdit,
 }
 
 impl Editor {
-    fn of(mode: &DictationMode) -> Self {
+    fn of(mode: &DictationMode, llm: &LlmSettings) -> Self {
         Self {
             name: TextEdit::new(mode.name.clone()),
             prompt: TextEdit::new(mode.post_processing.prompt.clone()),
@@ -119,6 +126,10 @@ impl Editor {
                     )
                 })
                 .collect(),
+            llm_touched: false,
+            base_url: TextEdit::new(llm.base_url.clone()),
+            api_key: TextEdit::new(llm.api_key.clone()),
+            model: TextEdit::new(llm.model.clone()),
         }
     }
 }
@@ -177,7 +188,7 @@ impl ModesPane {
         crate::personal_commands::include_builtin_transformations(&mut status);
         Self {
             selected: Selection::Default,
-            editor: Editor::of(&settings.dictation_processing.default_mode),
+            editor: Editor::of(&settings.dictation_processing.default_mode, &settings.llm),
             delete_armed: false,
             application_picker_open: false,
             application_search: TextEdit::default(),
@@ -276,6 +287,11 @@ impl ModesPane {
             .parse::<u64>()
             .unwrap_or(mode.post_processing.deadline_seconds)
             .max(1);
+        if editor.llm_touched {
+            settings.llm.base_url = editor.base_url.text.trim().to_string();
+            settings.llm.api_key = editor.api_key.text.clone();
+            settings.llm.model = editor.model.text.trim().to_string();
+        }
     }
 
     /// Rebuilds the drafts from settings another client saved.
@@ -285,7 +301,7 @@ impl ModesPane {
         {
             self.selected = Selection::Default;
         }
-        self.editor = Editor::of(mode(settings, self.selected));
+        self.editor = Editor::of(mode(settings, self.selected), &settings.llm);
     }
 
     pub(super) fn select(&mut self, selection: Selection) {
@@ -298,7 +314,7 @@ impl ModesPane {
 
     fn select_in(&mut self, settings: &AppSettings, selection: Selection) {
         self.select(selection);
-        self.editor = Editor::of(mode(settings, selection));
+        self.editor = Editor::of(mode(settings, selection), &settings.llm);
     }
 
     fn application_query(&self) -> String {
@@ -444,7 +460,7 @@ fn delete_mode(ui: &mut Ui) {
         return;
     }
     // The drafts belong to the mode going away.
-    ui.modes.editor = Editor::of(mode(&ui.settings, ui.modes.selected));
+    ui.modes.editor = Editor::of(mode(&ui.settings, ui.modes.selected), &ui.settings.llm);
     if ui.update(|settings| {
         settings.dictation_processing.modes.remove(index);
     }) {
@@ -1247,97 +1263,6 @@ fn mode_vocabulary(ui: &Ui, p: Paint) -> El {
         );
     }
     section_with(p, "mode-vocabulary", tr("Vocabulary"), add.mr(-4.0), rows)
-}
-
-fn processing(
-    ui: &Ui,
-    p: Paint,
-    selection: Selection,
-    current: &DictationMode,
-    layer: &mut Vec<El>,
-) -> El {
-    if super::platform_settings::opencode_managed() {
-        let row = super::controls::managed_row(
-            p,
-            "processing-enabled",
-            None,
-            tr("OpenCode transformation"),
-        );
-        return section(p, "processing", tr("Processing"), vec![row]);
-    }
-    let enabled = current.post_processing.enabled;
-    let can_toggle = enabled || ui.models.available();
-    let toggle = Switch::new(enabled)
-        .disabled(!can_toggle)
-        .on_toggle(|ui: &mut Ui| {
-            let enabled = !mode(&ui.settings, ui.modes.selected)
-                .post_processing
-                .enabled;
-            update_mode(ui, |mode| mode.post_processing.enabled = enabled);
-        })
-        .build(p.k)
-        .key("processing-toggle")
-        .label(tr("OpenCode transformation"));
-    let reason = (!can_toggle)
-        .then(|| models::unavailable_reason(ui, OpenCodeFeature::Transformation))
-        .flatten();
-    let mut rows = vec![setting_row(
-        p,
-        "processing-enabled",
-        tr("OpenCode transformation"),
-        reason,
-        toggle,
-    )];
-    if enabled {
-        rows.extend(models::rows(ui, p, Target::Mode(selection), layer));
-        rows.push(setting_row(
-            p,
-            "deadline",
-            tr("Deadline"),
-            Some(tr("Seconds")),
-            TextInput::new(&ui.modes.editor.deadline)
-                .label(tr("Deadline"))
-                .placeholder("30")
-                .width(Some(96.0))
-                .on_edit(|ui: &mut Ui| &mut ui.modes.editor.deadline)
-                .build(p.k)
-                .key("deadline-field"),
-        ));
-        rows.push(
-            col()
-                .key("instructions")
-                .px(METRICS.row_px)
-                .py(8.0)
-                .gap(6.0)
-                .child(
-                    text(tr("Instructions"))
-                        .key("title")
-                        .font(p.k.ty.ui)
-                        .color(p.text()),
-                )
-                .child(
-                    text(tr(
-                        "System instructions for rewriting dictation in this mode",
-                    ))
-                    .key("description")
-                    .font(DESCRIPTION)
-                    .color(p.muted()),
-                )
-                .child(
-                    TextArea::new(&ui.modes.editor.prompt)
-                        .placeholder(tr("Describe how OpenCode should rewrite your dictation…"))
-                        .rows(4)
-                        .width(None)
-                        .on_edit(|ui: &mut Ui| &mut ui.modes.editor.prompt)
-                        .build(p.k)
-                        .key("prompt"),
-                ),
-        );
-    }
-    if let Some(notice) = models::unavailable(ui, p, OpenCodeFeature::Transformation) {
-        rows.push(notice);
-    }
-    section(p, "processing", tr("Processing"), rows)
 }
 
 // ---------------------------------------------------------------------------

@@ -117,10 +117,22 @@ substitute for source inspection or a second roadmap.
   assertion on macOS, a logind `idle:sleep` inhibitor (only `idle` where
   polkit refuses a process outside the seat session) on Linux, and a
   system-required power request on Windows.
-- `dictation/processor`: the one OpenCode client and ordered processing policy
-  for macOS, Windows, and Linux: context-selected corrections, deadline-bounded
-  OpenCode rewrite profiles with corrected-transcript fallback, the ranked
-  model catalog, and the transformation stage, over `desktop/opencode_service`.
+- `dictation/processor`: the ordered processing policy for macOS, Windows,
+  and Linux: context-selected corrections, deadline-bounded rewrite profiles
+  with corrected-transcript fallback, the ranked model catalog, and the
+  transformation stage. `generate_cancellable` is the one rewrite choke
+  point: with `llm.provider = open_code` it uses `desktop/opencode_service`;
+  with a direct provider (`open_ai`, `anthropic`) it calls
+  `dictation/llm_client`, which sends the same assembled prompt to the
+  user-configured endpoint through `net`. A failed or incomplete direct
+  request falls back to the corrected transcript like any other failure.
+- `app_settings/llm`, `dictation/llm_client`: the user-configured rewrite
+  service. `llm.provider` chooses OpenCode, an OpenAI-compatible
+  `/chat/completions` endpoint, or Anthropic `/messages`; `llm.base_url`,
+  `llm.api_key` (plain text in settings.json, shown by `hex settings get`),
+  and `llm.model` configure the direct ones. The Modes pane's Processing
+  section edits them, fetches `/models`, and tests the connection. Logs name
+  only the host, never the key or dictated text.
 - `desktop/opencode_service`: the only way Hex reaches OpenCode, on every OS. It reads
   the running service's owner-only registration
   (`${XDG_STATE_HOME:-~/.local/state}/opencode/service.json`, then other
@@ -928,9 +940,11 @@ CoreAudio formats, AppleScript details, or event serialization.
   with status, duration, and byte counts, never text, bodies, arguments, or
   environment values.
 - Hex never starts, probes, or searches for an OpenCode executable, and never
-  starts the service: it only talks to an already running OpenCode service
-  found through its registration file (`desktop/opencode_service`). Nothing touches
-  OpenCode unless a feature that uses it runs: mode rewriting, meeting notes
+  starts the service: OpenCode features talk only to an already running
+  service found through its registration file (`desktop/opencode_service`).
+  Mode rewriting is the exception: with a direct `llm.provider` it instead
+  sends one HTTPS request to the user's own endpoint, with no OpenCode
+  involved. Nothing touches OpenCode unless a feature that uses it runs: mode rewriting, meeting notes
   with Summarize with OpenCode, sending an Annotate capture, or the model
   catalog while a picker that uses it shows: the Modes pane, or Meetings ›
   Settings › Advanced's Summary model (Labs › Choose meeting summary model,

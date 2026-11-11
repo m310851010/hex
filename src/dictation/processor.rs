@@ -939,6 +939,24 @@ fn generate_cancellable(
     if crate::policy::Policy::current().locks(lock) {
         return Err(eyre!(lock.refusal()));
     }
+    // A configured direct provider sends its own request, with no OpenCode
+    // service to discover. The mode's `provider/model` key is ignored here:
+    // the model comes from `llm.model`, and the Instructions still decide
+    // whether to only drop fillers or to polish.
+    let llm = crate::app_settings::AppSettings::saved_llm();
+    if llm.provider.direct() {
+        return if llm.ready() {
+            let text = crate::dictation::llm_client::generate(
+                prompt,
+                &llm,
+                remaining_generation_deadline(started, deadline)?,
+                cancelled,
+            )?;
+            Ok(Generated { text, model: None })
+        } else {
+            Err(eyre!("the direct LLM endpoint is not fully configured"))
+        };
+    }
     // Service discovery and the catalog read spend the generation's own
     // remaining budget, so a stalled OpenCode falls back by the deadline
     // instead of adding its fixed lookup timeouts on top.

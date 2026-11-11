@@ -51,6 +51,11 @@ pub(super) struct Models {
     /// Whether the popover was open at the last poll, so opening it reads
     /// the catalog again.
     picker_was_open: bool,
+    /// Models a direct LLM endpoint returned, and the error when it didn't.
+    pub(super) direct_models: Vec<String>,
+    pub(super) direct_error: Option<String>,
+    /// A connection test's answer, shown beside the direct-provider rows.
+    pub(super) direct_test: Option<String>,
 }
 
 impl Default for Models {
@@ -61,6 +66,9 @@ impl Default for Models {
             retry_at: None,
             picker: ComboboxState::default(),
             picker_was_open: false,
+            direct_models: Vec::new(),
+            direct_error: None,
+            direct_test: None,
         }
     }
 }

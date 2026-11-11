@@ -1204,6 +1204,19 @@ const TRANSLATIONS: &[(&str, &str)] = &[
     ("Website host (e.g. github.com)", "Хост сайта (например github.com)"),
     ("Websites", "Сайти"),
     ("No vocabulary in this mode; the shared list always applies.", "В этом режиме нет словаря; общий список действует всегда."),
+    ("OpenAI compatible", "Compatível com OpenAI"),
+    ("Anthropic", "Anthropic"),
+    ("AI rewriting", "Reescrita por IA"),
+    ("Provider", "Provedor"),
+    ("Base URL", "URL base"),
+    ("API key", "Chave de API"),
+    ("Model id", "Id do modelo"),
+    ("Fetch models", "Buscar modelos"),
+    ("Test connection", "Testar conexão"),
+    ("Connection works", "A conexão funciona"),
+    ("Stored in settings.json as plain text", "Armazenado em texto simples no settings.json"),
+    ("OpenCode service, or a direct endpoint you configure", "Serviço OpenCode ou endpoint direto que você configura"),
+    ("Describe how the model should rewrite your dictation…", "Descreva como o modelo deve reescrever seu ditado…"),
 ];
 
 #[cfg(test)]

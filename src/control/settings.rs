@@ -265,6 +265,26 @@ const KEYS: &[Key] = &[
         "The Global mode: replacements, transformations, and rewriting",
     ),
     key(
+        "llm.provider",
+        Kind::Choice(&["open_code", "open_ai", "anthropic"]),
+        "Which service rewrites dictation: the OpenCode service, or a direct OpenAI-compatible or Anthropic endpoint",
+    ),
+    key(
+        "llm.base_url",
+        Kind::Text,
+        "Base URL of the direct LLM endpoint (no trailing slash)",
+    ),
+    key(
+        "llm.api_key",
+        Kind::Text,
+        "API key for the direct LLM endpoint, stored as plain text",
+    ),
+    key(
+        "llm.model",
+        Kind::Text,
+        "Model id for the direct LLM endpoint",
+    ),
+    key(
         "dictation_processing.modes",
         Kind::Json,
         "Modes for specific apps and websites, as a JSON array",
@@ -2107,5 +2127,33 @@ mod tests {
         ] {
             assert!(apply_all(&settings, &values(refused), &rules()).is_err());
         }
+    }
+
+    #[test]
+    fn direct_llm_settings_round_trip_through_the_cli() {
+        let settings = AppSettings::default();
+        let rules = rules();
+        let provider = apply(&settings, "llm.provider", "open_ai", &rules).unwrap();
+        assert_eq!(
+            provider.settings.llm.provider,
+            crate::app_settings::LlmProvider::OpenAi
+        );
+        let url = apply(
+            &provider.settings,
+            "llm.base_url",
+            "https://example.com/v1",
+            &rules,
+        )
+        .unwrap();
+        assert_eq!(url.settings.llm.base_url, "https://example.com/v1");
+        let key = apply(&url.settings, "llm.api_key", "sk-plain-text", &rules).unwrap();
+        assert_eq!(key.settings.llm.api_key, "sk-plain-text");
+        let model = apply(&key.settings, "llm.model", "gpt-4o-mini", &rules).unwrap();
+        assert_eq!(model.settings.llm.model, "gpt-4o-mini");
+        assert!(model.settings.llm.ready());
+        // The person asked for the key to stay visible to `hex settings get`.
+        let shown = get(&model.settings, "llm.api_key").unwrap();
+        assert_eq!(shown[0].value, "sk-plain-text");
+        assert!(apply(&settings, "llm.provider", "bogus", &rules).is_err());
     }
 }

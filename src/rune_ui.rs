@@ -910,7 +910,8 @@ impl Ui {
         let mut modes = settings.clone();
         self.modes.project(&mut modes);
         Drafts {
-            modes: modes.dictation_processing != settings.dictation_processing,
+            modes: modes.dictation_processing != settings.dictation_processing
+                || modes.llm != settings.llm,
             vocabulary: self.vocabulary.project() != settings.vocabulary,
         }
     }
@@ -1080,7 +1081,10 @@ impl Ui {
         let changed = service != self.settings;
         if changed {
             let drafts = self.drafts();
-            if !drafts.modes && service.dictation_processing != self.settings.dictation_processing {
+            if !drafts.modes
+                && (service.dictation_processing != self.settings.dictation_processing
+                    || service.llm != self.settings.llm)
+            {
                 self.modes.reload(&service);
             }
             if !drafts.vocabulary && service.vocabulary != self.settings.vocabulary {

@@ -20,6 +20,7 @@ mod capture;
 mod dictation_processing;
 mod hotkeys;
 mod labs;
+mod llm;
 mod meeting_folder;
 mod meetings;
 mod persistence;
@@ -36,6 +37,7 @@ pub use dictation_processing::{
 };
 pub use hotkeys::*;
 pub use labs::*;
+pub use llm::{LlmProvider, LlmSettings};
 pub use meeting_folder::default_meeting_output_folder;
 pub use meetings::*;
 #[cfg_attr(not(target_os = "macos"), allow(unused_imports))]
@@ -286,6 +288,9 @@ pub struct AppSettings {
     pub transcription_recents: Vec<TranscriptionSelection>,
     pub keyboard_model_switching: KeyboardModelSwitching,
     pub dictation_processing: DictationProcessingSettings,
+    /// Which service rewrites dictation: the OpenCode service or a direct
+    /// OpenAI-compatible / Anthropic endpoint.
+    pub llm: LlmSettings,
     /// Retired Voice Action settings, kept untouched in `settings.json`.
     #[serde(
         default,
@@ -423,6 +428,7 @@ impl Default for AppSettings {
             transcription_recents: Vec::new(),
             keyboard_model_switching: KeyboardModelSwitching::default(),
             dictation_processing: DictationProcessingSettings::default(),
+            llm: LlmSettings::default(),
             retired_voice_action: None,
             history_retention: crate::history::HistoryRetention::default(),
             meetings: MeetingSettings::default(),
@@ -681,6 +687,23 @@ impl AppSettings {
             .and_then(|path| fs::read(path).ok())
             .and_then(|data| serde_json::from_slice::<File>(&data).ok())
             .map(|file| file.labs)
+            .unwrap_or_default()
+    }
+
+    /// The saved `llm` settings, read without loading or normalizing
+    /// anything else, so the rewrite sees the latest provider choice even
+    /// while the window holds its own settings in memory.
+    pub fn saved_llm() -> LlmSettings {
+        #[derive(Deserialize)]
+        struct File {
+            #[serde(default)]
+            llm: LlmSettings,
+        }
+        path()
+            .ok()
+            .and_then(|path| fs::read(path).ok())
+            .and_then(|data| serde_json::from_slice::<File>(&data).ok())
+            .map(|file| file.llm)
             .unwrap_or_default()
     }
 
