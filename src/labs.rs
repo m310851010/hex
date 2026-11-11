@@ -1251,6 +1251,7 @@ fn encode_where(settings: &LabsSettings, reaches: impl Fn(Feature) -> bool) -> u
             GNOME_MEETING_CAPSULES,
         ),
         (Feature::Screenshots, settings.screenshots, SCREENSHOTS),
+        (Feature::ModesPane, settings.modes_pane, MODES_PANE),
     ]
     .into_iter()
     .filter(|(feature, on, _)| *on && reaches(*feature))

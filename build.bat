@@ -13,6 +13,9 @@ rem regardless of user-level environment variables.
 set "CMAKE_GENERATOR=Visual Studio 17 2022"
 set "VULKAN_SDK=D:\tmp\hex-build\vulkan\sdk309"
 set "CMAKE_PREFIX_PATH=D:/tmp/hex-build/vulkan/sdk309/Lib/cmake"
+rem A checkout build is a local build: dev-audience Labs features show, and
+rem it never checks for or installs updates over itself.
+set "HEX_LOCAL_BUILD=1"
 
 where cargo >nul 2>nul || (echo cargo not found; install the Rust toolchain first & exit /b 1)
 
