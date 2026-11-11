@@ -46,4 +46,13 @@ pub(super) const TRANSLATIONS: &[(&str, [&str; 6])] = &[
     ("Fetching…", ["Pobieranie…", "拉取中…", "取得中…", "Abrufen…", "Obteniendo…", "Отримання…"]),
     ("Testing…", ["Testowanie…", "测试中…", "テスト中…", "Testen…", "Probando…", "Перевірка…"]),
     ("Rewrite with AI", ["Przepisywanie przez AI", "AI 改写", "AI 書き換え", "KI-Umschreiben", "Reescritura con IA", "AI-переписування"]),
+    ("Edit in Modes", ["Edytuj w Trybach", "在模式中编辑", "モードで編集", "In Modi bearbeiten", "Editar en Modos", "Редагувати в Режимах"]),
+    ("Files", ["Pliki", "文件", "ファイル", "Dateien", "Archivos", "Файли"]),
+    ("Data folder", ["Folder danych", "数据文件夹", "データフォルダ", "Datenordner", "Carpeta de datos", "Папка даних"]),
+    ("Change…", ["Zmień…", "更改…", "変更…", "Ändern…", "Cambiar…", "Змінити…"]),
+    ("Choose data folder", ["Wybierz folder danych", "选择数据文件夹", "データフォルダを選択", "Datenordner wählen", "Elegir carpeta de datos", "Виберіть папку даних"]),
+    ("Restart Hex to use the new data folder", ["Uruchom Hex ponownie, aby użyć nowego folderu danych", "重启 Hex 以使用新的数据文件夹", "新しいデータフォルダを使うには Hex を再起動してください", "Starte Hex neu, um den neuen Datenordner zu verwenden", "Reinicia Hex para usar la nueva carpeta de datos", "Перезапустіть Hex, щоб використати нову папку даних"]),
+    ("Logs", ["Logi", "日志", "ログ", "Protokolle", "Registros", "Журнали"]),
+    ("Captures", ["Nagrania", "录屏", "キャプチャ", "Aufnahmen", "Capturas", "Записи"]),
+    ("Updates", ["Aktualizacje", "更新", "更新", "Updates", "Actualizaciones", "Оновлення"]),
 ];

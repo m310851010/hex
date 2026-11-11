@@ -13,6 +13,7 @@ mod activity;
 #[cfg(hex_capture)]
 pub(crate) mod capture_capsule;
 mod controls;
+mod data_root;
 #[cfg(target_os = "macos")]
 pub(crate) mod deep_link;
 mod explainer;
@@ -702,6 +703,7 @@ pub(crate) struct Ui {
     /// When a text field last changed without being saved.
     draft_since: Option<Instant>,
     duck_volume_drag: Option<f32>,
+    pub(crate) data_root: data_root::DataRoot,
     models: models::Models,
     history: history::HistoryPane,
     modes: modes::ModesPane,
@@ -816,6 +818,7 @@ impl Ui {
             preparing: None,
             draft_since: None,
             duck_volume_drag: None,
+            data_root: data_root::DataRoot::default(),
             models: models::Models::default(),
             history: history::HistoryPane::default(),
             modes,
@@ -1243,6 +1246,7 @@ fn local_meetings(ui: &mut Ui) -> bool {
 
 fn setup(ui: &mut Ui, waker: Waker) {
     ui.modes.waker = Some(waker.clone());
+    ui.data_root.set_waker(waker.clone());
     ui.modes.icon_cache = Some(rune::ImageCache::new(waker.clone()));
     if let Service::Pending(connect) = &mut ui.service {
         let connect = std::mem::take(connect);
@@ -1270,6 +1274,7 @@ fn poll(ui: &mut Ui, clock: f64, tx: &mut Tx) -> bool {
     let now = Instant::now();
     let mut changed = ui.save_drafts(now);
     changed |= paste_access::poll(ui);
+    changed |= ui.data_root.poll();
     // The OpenCode catalog is read only while a pane that uses it shows:
     // Modes, or Meetings › Settings while OpenCode writes the summaries.
     changed |= ui.models.poll(

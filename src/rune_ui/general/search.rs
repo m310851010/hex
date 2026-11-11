@@ -80,6 +80,10 @@ pub(crate) fn pane(ui: &Ui, p: Paint, layer: &mut Vec<El>) -> El {
                 matched = true;
             }
         }
+        if !searching || matches(query, tr("Files"), None) {
+            content = content.child(super::super::data_root::files_section(ui, p));
+            matched = true;
+        }
     }
     if searching && !matched {
         content = content.child(empty_state(

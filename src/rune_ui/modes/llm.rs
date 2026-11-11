@@ -13,9 +13,7 @@ use crate::desktop::i18n::tr;
 use crate::desktop::opencode_catalog::OpenCodeFeature;
 
 use super::super::Ui;
-use super::super::controls::{
-    ButtonKind, DESCRIPTION, METRICS, Paint, button, note, section, setting_row,
-};
+use super::super::controls::{ButtonKind, METRICS, Paint, button, note, section, setting_row};
 use super::super::models::{self, Target};
 use super::{FIELD_WIDTH, Selection, mode, update_mode};
 
@@ -78,13 +76,7 @@ pub(super) fn processing(
         },
     );
     let mut rows = vec![
-        setting_row(
-            p,
-            "llm-provider",
-            tr("Provider"),
-            Some(tr("OpenCode service, or a direct endpoint you configure")),
-            provider_pick,
-        ),
+        setting_row(p, "llm-provider", tr("Provider"), None, provider_pick),
         setting_row(p, "processing-enabled", tr("AI rewriting"), reason, toggle),
     ];
     if direct {
@@ -108,7 +100,7 @@ pub(super) fn processing(
             p,
             "llm-api-key",
             tr("API key"),
-            Some(tr("Stored in settings.json as plain text")),
+            None,
             TextInput::new(&ui.modes.editor.api_key)
                 .secure()
                 .label(tr("API key"))
@@ -256,7 +248,7 @@ pub(super) fn processing(
             p,
             "deadline",
             tr("Deadline"),
-            Some(tr("Seconds")),
+            None,
             TextInput::new(&ui.modes.editor.deadline)
                 .label(tr("Deadline"))
                 .placeholder("30")
@@ -276,14 +268,6 @@ pub(super) fn processing(
                         .key("title")
                         .font(p.k.ty.ui)
                         .color(p.text()),
-                )
-                .child(
-                    text(tr(
-                        "System instructions for rewriting dictation in this mode",
-                    ))
-                    .key("description")
-                    .font(DESCRIPTION)
-                    .color(p.muted()),
                 )
                 .child(
                     TextArea::new(&ui.modes.editor.prompt)

@@ -375,8 +375,27 @@ fn every_dictation(ui: &Ui, p: Paint, mode: &DictationMode) -> El {
         "every-dictation",
         tr("Every dictation"),
         tr("Runs top to bottom"),
+        Some(modes_link(p, ui)),
         rows,
     )
+}
+
+/// The link from the step list to the Modes pane's Processing section,
+/// turning its Labs switch on first when the pane is hidden.
+fn modes_link(p: Paint, ui: &Ui) -> El {
+    let hidden = !super::Pane::Modes.shown(ui);
+    Button::new(tr("Edit in Modes"))
+        .variant(ButtonVariant::Ghost)
+        .on_press_tx(move |ui: &mut Ui, tx: &mut Tx| {
+            if hidden && !ui.settings.labs.modes_pane {
+                ui.update(|settings| {
+                    crate::labs::Feature::ModesPane.set(settings, true);
+                });
+            }
+            ui.select_pane(super::Pane::Modes, tx);
+        })
+        .build_push(p.k)
+        .key("edit-in-modes")
 }
 
 /// Dictate without processing: a second dictation shortcut that skips
@@ -387,6 +406,7 @@ fn without_processing(ui: &Ui, p: Paint) -> El {
         "without-processing",
         tr("Without processing"),
         tr("Skips every step"),
+        None,
         super::general::shortcut_rows(
             ui,
             p,
@@ -400,19 +420,28 @@ fn without_processing(ui: &Ui, p: Paint) -> El {
 }
 
 /// A section label with a faint hint at its end, over a card.
-fn labeled(p: Paint, key: &str, title: &str, hint: &str, rows: Vec<CardRow>) -> El {
+fn labeled(
+    p: Paint,
+    key: &str,
+    title: &str,
+    hint: &str,
+    action: Option<El>,
+    rows: Vec<CardRow>,
+) -> El {
+    let mut header = row()
+        .key("header-row")
+        .mx(METRICS.row_px)
+        .gap(8.0)
+        .center_y()
+        .child(p.section_label(title).grow(1.0))
+        .child(text(hint).key("hint").font(p.k.ty.small).color(p.faint()));
+    if let Some(action) = action {
+        header = header.child(action);
+    }
     col()
         .key(key)
         .gap(METRICS.label_gap)
-        .child(
-            row()
-                .key("header-row")
-                .mx(METRICS.row_px)
-                .gap(8.0)
-                .center_y()
-                .child(p.section_label(title).grow(1.0))
-                .child(text(hint).key("hint").font(p.k.ty.small).color(p.faint())),
-        )
+        .child(header)
         .child(card(p, "card", rows))
 }
 
@@ -583,6 +612,7 @@ fn some_apps(ui: &Ui, p: Paint, modes: &[DictationMode]) -> El {
         "some-apps",
         tr("In some apps"),
         tr("Used there instead"),
+        None,
         rows,
     )
 }

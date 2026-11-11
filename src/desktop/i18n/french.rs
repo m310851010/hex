@@ -1224,6 +1224,15 @@ const TRANSLATIONS: &[(&str, &str)] = &[
     ("Fetching…", "Récupération…"),
     ("Testing…", "Test…"),
     ("Rewrite with AI", "Réécriture par IA"),
+    ("Edit in Modes", "Modifier dans Modes"),
+    ("Files", "Fichiers"),
+    ("Data folder", "Dossier de données"),
+    ("Change…", "Modifier…"),
+    ("Choose data folder", "Choisir le dossier de données"),
+    ("Restart Hex to use the new data folder", "Redémarrez Hex pour utiliser le nouveau dossier"),
+    ("Logs", "Journaux"),
+    ("Captures", "Captures"),
+    ("Updates", "Mises à jour"),
 ];
 
 #[cfg(test)]

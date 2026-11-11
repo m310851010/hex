@@ -28,9 +28,111 @@ pub fn app_name() -> &'static str {
     }
 }
 
+/// The file that names a chosen data root. It lives beside the executable's
+/// install folder (not inside the movable data), so moving the data never
+/// hides the pointer to it. A missing file means the default root.
+#[cfg(windows)]
+const DATA_ROOT_FILE: &str = "hex-data-root.txt";
+
+/// A chosen data root read before anything else, so `support_dir` can find
+/// `settings.json` without loading settings. `None` keeps the default.
+pub fn chosen_data_root() -> Option<PathBuf> {
+    #[cfg(windows)]
+    {
+        let root = this_data_root()?;
+        let path = root.join(DATA_ROOT_FILE);
+        let text = fs::read_to_string(path).ok()?;
+        let chosen = PathBuf::from(text.trim());
+        (!chosen.as_os_str().is_empty()).then_some(chosen)
+    }
+    #[cfg(not(windows))]
+    {
+        // On macOS and Linux the data root stays the platform folder; the
+        // window offers this choice only where Hex owns the install folder.
+        None
+    }
+}
+
+/// Where the data-root pointer is written when a person chooses a folder.
+#[cfg(windows)]
+pub fn data_root_file() -> Result<PathBuf> {
+    Ok(this_data_root()
+        .ok_or_else(|| eyre!("this executable has no install folder"))?
+        .join(DATA_ROOT_FILE))
+}
+
+/// Moves everything Hex has written to `new` and points future launches
+/// there. The current process keeps its old paths (log handles, locks, and
+/// cached folders), so the window asks for a restart. `move_once` decides
+/// between a rename and a cross-volume copy.
+#[cfg(windows)]
+pub fn set_data_root(new: &Path) -> Result<()> {
+    let current = support_dir()?;
+    if current == new {
+        return Ok(());
+    }
+    relocate_data(&current, new)?;
+    let file = data_root_file()?;
+    let partial = file.with_extension("txt.partial");
+    fs::write(&partial, new.to_string_lossy().as_bytes())?;
+    fs::rename(&partial, &file)?;
+    Ok(())
+}
+
+/// Copies or moves Hex's data folders from `current` to `new`, leaving the
+/// install's own files (versions, bin, receipt) where the executable runs.
+#[cfg(windows)]
+fn relocate_data(current: &Path, new: &Path) -> Result<()> {
+    fs::create_dir_all(new)?;
+    // A file the running process holds open (the process log, the local API
+    // lock) is copied instead of moved; the old copy stays behind and the
+    // new one takes over after the restart.
+    for name in [
+        "settings.json",
+        "history.json",
+        "logs",
+        "models",
+        "captures",
+        "meetings",
+        "updates",
+        "local-api.json",
+        "update-bucket",
+        "onboarding-complete",
+        "personal-commands.json",
+        "transform-trust.json",
+    ] {
+        let from = current.join(name);
+        if !from.exists() {
+            continue;
+        }
+        let to = new.join(name);
+        if to.exists() {
+            continue;
+        }
+        if fs::rename(&from, &to).is_err() && move_across(&from, &to).is_err() {
+            let copied = if from.is_dir() {
+                copy_dir(&from, &to)
+            } else {
+                fs::copy(&from, &to).map(|_| ())
+            };
+            copied.map_err(|error| {
+                eyre!(
+                    "could not copy {} to {}: {error}",
+                    from.display(),
+                    to.display()
+                )
+            })?;
+        }
+    }
+    Ok(())
+}
+
 pub fn support_dir() -> Result<PathBuf> {
     if let Some(path) = std::env::var_os("HEX_APPLICATION_SUPPORT_DIR") {
         return Ok(path.into());
+    }
+    if let Some(root) = chosen_data_root() {
+        return Ok(root);
     }
     #[cfg(windows)]
     if let Some(root) = this_data_root() {
@@ -481,5 +583,28 @@ mod tests {
             user_config_dir_in(home, true),
             home.join(".config").join("hex-test")
         );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn relocating_data_moves_files_and_leaves_the_install_behind() {
+        let root = std::env::temp_dir().join(format!("hex-relocate-{}", std::process::id()));
+        let current = root.join("old");
+        let new = root.join("new");
+        fs::create_dir_all(current.join("models")).unwrap();
+        fs::write(current.join("settings.json"), b"settings").unwrap();
+        fs::write(current.join("models/model.gguf"), b"weights").unwrap();
+        fs::write(current.join("install.json"), b"receipt").unwrap();
+        fs::create_dir_all(current.join("versions/1.0.0")).unwrap();
+
+        relocate_data(&current, &new).unwrap();
+        assert_eq!(fs::read(new.join("settings.json")).unwrap(), b"settings");
+        assert_eq!(fs::read(new.join("models/model.gguf")).unwrap(), b"weights");
+        assert!(
+            !new.join("install.json").exists(),
+            "the install receipt stays with the executable"
+        );
+        assert!(!new.join("versions").exists());
+        fs::remove_dir_all(root).unwrap();
     }
 }
